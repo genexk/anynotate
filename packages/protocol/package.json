@@ -1,0 +1,28 @@
+{
+  "name": "@anynotate/protocol",
+  "version": "0.1.0",
+  "description": "Wire types and zod schemas shared by Anynotate clients and the Anynotate bridge.",
+  "license": "Apache-2.0",
+  "author": "Kun Xu",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": { "type": "git", "url": "git+https://github.com/genexk/anynotate.git", "directory": "packages/protocol" },
+  "homepage": "https://github.com/genexk/anynotate/tree/main/packages/protocol",
+  "keywords": ["anynotate", "annotation", "protocol"],
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src", "PROTOCOL.md", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": { "zod": "^4.1.0" },
+  "publishConfig": { "access": "public" }
+}

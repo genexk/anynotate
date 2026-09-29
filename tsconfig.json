@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "customConditions": ["bun"],
+    "strict": true, "noUncheckedIndexedAccess": true, "skipLibCheck": true,
+    "types": ["bun"], "noEmit": true, "allowImportingTsExtensions": true
+  },
+  "include": ["src", "test", "bin", "packages/protocol/src"]
+}

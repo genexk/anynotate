@@ -1,0 +1,88 @@
+import { z } from "zod";
+
+export const AGENT_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+export const Agent = z.string().regex(AGENT_NAME);
+export type Agent = z.infer<typeof Agent>;
+
+const Box = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+
+export const Annotation = z.object({
+  id: z.string().regex(/^A\d+$/),
+  // v1 kinds only; "region" | "draw" are reserved for later tools.
+  kind: z.enum(["text", "element"]),
+  comment: z.string(),
+  intent: z.enum(["question", "change", "bug", "note"]).optional(),
+  anchor: z.object({
+    quote: z.object({ exact: z.string(), prefix: z.string(), suffix: z.string() }).optional(),
+    position: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
+    css: z.string(),
+    path: z.array(z.string()),
+    near: z.string(),
+    hosts: z.array(z.string()).optional(),
+  }),
+  element: z.object({
+    tag: z.string(),
+    role: z.string().optional(),
+    name: z.string().optional(),
+    text: z.string().max(500),
+    html: z.string().max(4096),
+    attrs: z.record(z.string(), z.string()),
+  }).optional(),
+  box: Box,
+  viewport: z.object({ w: z.number(), h: z.number(), dpr: z.number(), scrollY: z.number() }),
+  crop: z.string().regex(/^crops\/A\d+\.png$/),
+});
+export type Annotation = z.infer<typeof Annotation>;
+
+export const Target = z.object({
+  agent: Agent,
+  sessionId: z.string().optional(),
+  cwd: z.string().optional(),
+  pane: z.string().optional(),
+});
+export type Target = z.infer<typeof Target>;
+
+// What the extension POSTs; the bridge assigns id and files.
+export const BundleInput = z.object({
+  v: z.literal(1),
+  url: z.string(),
+  title: z.string(),
+  sentAt: z.iso.datetime({ offset: true }),
+  target: Target,
+  overall: z.string().optional(),
+  annotations: z.array(Annotation),
+});
+export type BundleInput = z.infer<typeof BundleInput>;
+
+// Matches what newBundleId produces, including the "-<n>" collision suffix.
+export const BUNDLE_ID = /^\d{4}-\d{2}-\d{2}T\d{6}-[a-z0-9-]+$/;
+
+export const Bundle = BundleInput.extend({
+  id: z.string().regex(BUNDLE_ID),
+  files: z.object({ page: z.string(), screenshot: z.string(), snapshot: z.string().optional() }),
+});
+export type Bundle = z.infer<typeof Bundle>;
+
+export const Via = z.enum(["push", "herdr", "hook", "pull"]);
+export type Via = z.infer<typeof Via>;
+
+export const Status = z.object({
+  state: z.enum(["queued", "delivered", "acked"]),
+  at: z.string(),
+  via: Via.optional(),
+  session: z.string().optional(),
+  summary: z.string().optional(),
+  note: z.string().optional(),
+});
+export type Status = z.infer<typeof Status>;
+
+export const Session = z.object({
+  id: z.string(),
+  agent: Agent,
+  cwd: z.string(),
+  title: z.string(),
+  method: z.enum(["push", "herdr", "next-prompt"]),
+  pane: z.string().optional(),
+  sessionIds: z.array(z.string()).optional(),
+});
+export type Session = z.infer<typeof Session>;

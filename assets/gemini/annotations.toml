@@ -1,0 +1,9 @@
+description = "List or read browser annotations sent with Anynotate"
+prompt = """
+Browser annotations from Anynotate:
+
+!{anynotate annotations {{args}}}
+
+If this is a list, show it and ask which bundle to open (then run `anynotate annotations <id>`).
+If it is a bundle, restate what the user wants for each note and act on it. Search page.md for ⟦A1⟧ markers to locate a note in the page, view crops/A<n>.png for visual detail, and grep snapshot.html rather than reading it whole.
+"""
