@@ -86,3 +86,42 @@ export const Session = z.object({
   sessionIds: z.array(z.string()).optional(),
 });
 export type Session = z.infer<typeof Session>;
+
+// Protocol v1. Additive changes (optional fields, new endpoints) keep the version; removals, renames and
+// semantic changes bump PROTOCOL_VERSION, and the bridge keeps accepting the previous version for a release.
+export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_MIN = 1;
+
+export const HealthResponse = z.object({
+  ok: z.literal(true),
+  bridgeVersion: z.string(),
+  protocol: z.object({ version: z.number().int().positive(), min: z.number().int().positive() }),
+});
+export type HealthResponse = z.infer<typeof HealthResponse>;
+
+export const SessionsResponse = z.array(Session);
+export type SessionsResponse = z.infer<typeof SessionsResponse>;
+
+export const SendResponse = z.object({ id: z.string().regex(BUNDLE_ID), status: Status });
+export type SendResponse = z.infer<typeof SendResponse>;
+
+export const BundleStatusResponse = z.object({ bundle: Bundle, status: Status.nullable() });
+export type BundleStatusResponse = z.infer<typeof BundleStatusResponse>;
+
+export const AckRequest = z.object({ summary: z.string().optional() });
+export type AckRequest = z.infer<typeof AckRequest>;
+
+export const OkResponse = z.object({ ok: z.literal(true) });
+export type OkResponse = z.infer<typeof OkResponse>;
+
+export const ErrorResponse = z.object({ error: z.string() });
+export type ErrorResponse = z.infer<typeof ErrorResponse>;
+
+export type Compatibility = "ok" | "bridge-too-old" | "extension-too-old";
+
+// A client supports protocol versions [min, max]; a bridge speaks `version` and still accepts down to `min`.
+export function compatibility(client: { min: number; max: number }, bridge: { version: number; min: number }): Compatibility {
+  if (bridge.version < client.min) return "bridge-too-old";
+  if (client.max < bridge.min) return "extension-too-old";
+  return "ok";
+}

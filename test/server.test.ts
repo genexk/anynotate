@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HealthResponse } from "@anynotate/protocol";
+import pkg from "../package.json";
 import { createBridge } from "../src/bridge/server";
 import { loadOrCreateToken } from "../src/bridge/token";
 import { touchSeen } from "../src/inbox/seen";
@@ -82,25 +85,23 @@ test("sessions merge push, herdr and next-prompt", async () => {
   expect(s.map((x: any) => `${x.method}:${x.agent}:${x.id}`)).toEqual(["push:claude:s-1", "herdr:codex:w1:p2", "next-prompt:gemini:g-1"]);
 });
 
-test("a next-prompt session running in a live herdr pane is listed only as that pane, which names it", async () => {
+test("sessions tied to a herdr pane are never listed as next-prompt; the live pane names its newest one", async () => {
   touchSeen("codex", "in-live-pane", "/r2", new Date(), "w1:p2");
   touchSeen("claude", "in-dead-pane", "/r4", new Date(), "w9:p9");
   touchSeen("gemini", "no-pane", "/r3");
   const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
-  expect(s.map((x: any) => `${x.method}:${x.id}`).sort()).toEqual(["herdr:w1:p2", "next-prompt:in-dead-pane", "next-prompt:no-pane"]);
+  expect(s.map((x: any) => `${x.method}:${x.id}`).sort()).toEqual(["herdr:w1:p2", "next-prompt:no-pane"]);
   expect(s.find((x: any) => x.id === "w1:p2").sessionIds).toEqual(["in-live-pane"]);
-  expect(s.find((x: any) => x.id === "in-dead-pane").pane).toBe("w9:p9");
   expect(s.find((x: any) => x.id === "no-pane").pane).toBeUndefined();
 });
 
-test("a live pane is attributed only to its newest session of the same agent; older ones stay listed", async () => {
+test("child and older sessions from a pane stay hidden; only the newest same-agent one names the pane", async () => {
   touchSeen("codex", "older", "/r2", new Date(Date.now() - 60_000), "w1:p2");
   touchSeen("codex", "newer", "/r2", new Date(), "w1:p2");
-  touchSeen("claude", "other-agent", "/r2", new Date(Date.now() - 1000), "w1:p2");
+  touchSeen("claude", "child-run", "/r2", new Date(Date.now() - 1000), "w1:p2");
   const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
-  expect(s.map((x: any) => `${x.method}:${x.id}`).sort()).toEqual(["herdr:w1:p2", "next-prompt:older", "next-prompt:other-agent"]);
+  expect(s.map((x: any) => `${x.method}:${x.id}`)).toEqual(["herdr:w1:p2"]);
   expect(s.find((x: any) => x.id === "w1:p2").sessionIds).toEqual(["newer"]);
-  expect(s.find((x: any) => x.id === "older").pane).toBe("w1:p2");
 });
 
 test("SSE delivers pushes to a registered adapter, ack updates status", async () => {
@@ -203,4 +204,95 @@ test("/sessions lists a herdr pane of any agent kind, and a bundle aimed at it i
   const r = await fetch(`${base}/bundles`, { method: "POST", headers: H, body: form({ ...sampleInput, target: { agent: "agy", pane: "w2:p1", cwd: "/g" } }) });
   expect(r.status).toBe(201);
   expect((await r.json()).status).toMatchObject({ state: "delivered", via: "herdr" });
+});
+
+const EXT = { Origin: "chrome-extension://abc" };
+
+function rawGet(port: number, path: string, headers: Record<string, string>): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const r = request({ host: "127.0.0.1", port, path, method: "GET", headers }, (res) => {
+      let body = "";
+      res.on("data", (c) => (body += c));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    r.on("error", reject);
+    r.end();
+  });
+}
+
+test("health answers the protocol v1 handshake", async () => {
+  for (const init of [{ method: "POST", headers: EXT }, {}] as RequestInit[]) {
+    const body = await (await fetch(`${base}/health`, init)).json();
+    expect(HealthResponse.parse(body)).toEqual({ ok: true, bridgeVersion: pkg.version, protocol: { version: 1, min: 1 } });
+  }
+});
+
+test("the allowed extension origin still needs the token, and POST variants serve it", async () => {
+  expect((await fetch(`${base}/sessions`, { method: "POST", headers: EXT })).status).toBe(401);
+  const s = await fetch(`${base}/sessions`, { method: "POST", headers: { ...EXT, ...H } });
+  expect(s.status).toBe(200);
+  expect(Array.isArray(await s.json())).toBe(true);
+  const sent = await fetch(`${base}/bundles`, { method: "POST", headers: { ...EXT, ...H }, body: form(sampleInput) });
+  expect(sent.status).toBe(201);
+  const { id } = await sent.json();
+  const st = await fetch(`${base}/bundles/${id}/status`, { method: "POST", headers: { ...EXT, ...H } });
+  expect(st.status).toBe(200);
+  expect((await st.json()).bundle.id).toBe(id);
+});
+
+test("a forged extension Origin without the token cannot type into a pane", async () => {
+  bridge.server.stop(true);
+  const prompted: string[] = [];
+  bridge = createBridge({
+    token: "tok", port: 0, allowedOrigins: ["chrome-extension://abc"],
+    listPanes: async () => [{ pane: "w1:p2", agent: "codex", cwd: "/r2", title: "shell", status: "idle" }],
+    routeDeps: { waitIdle: async () => ({ ok: true }), promptPane: async (pane) => { prompted.push(pane); return { ok: true }; } },
+  });
+  base = `http://127.0.0.1:${bridge.server.port}`;
+  const r = await fetch(`${base}/bundles`, {
+    method: "POST", headers: EXT, body: form({ ...sampleInput, target: { agent: "codex", pane: "w1:p2", cwd: "/r2" } }),
+  });
+  expect(r.status).toBe(401);
+  expect(await r.json()).toEqual({ error: "bad token" });
+  await Bun.sleep(50);
+  expect(prompted).toEqual([]);
+});
+
+test("without an allowed origin every endpoint but /health needs the right token", async () => {
+  for (const [method, path] of [["GET", "/sessions"], ["POST", "/sessions"], ["POST", "/bundles"], ["POST", "/bundles/x/status"], ["GET", "/bundles/x"]] as const) {
+    const r = await fetch(`${base}${path}`, { method });
+    expect({ method, path, status: r.status }).toEqual({ method, path, status: 401 });
+  }
+  for (const token of ["to", "tok2", "TOK"]) {
+    expect((await fetch(`${base}/sessions`, { headers: { "X-Anynotate-Token": token } })).status).toBe(401);
+  }
+  expect((await fetch(`${base}/sessions`, { headers: H })).status).toBe(200);
+});
+
+test("the allowed extension origin without the token gets a 401 from every route but /health", async () => {
+  const id = "2026-09-24T153200-tomato-soup";
+  const routes = [
+    ["POST", "/register"], ["POST", "/heartbeat"], ["POST", `/bundles/${id}/ack`],
+    ["POST", `/bundles/${id}/status`], ["GET", "/adapter/x/events"], ["GET", "/sessions"],
+  ] as const;
+  for (const [method, path] of routes) {
+    const r = await fetch(`${base}${path}`, { method, headers: EXT });
+    expect({ method, path, status: r.status }).toEqual({ method, path, status: 401 });
+  }
+});
+
+test("foreign origins get a JSON 403, preflight included", async () => {
+  for (const method of ["GET", "POST", "OPTIONS"]) {
+    const r = await fetch(`${base}/health`, { method, headers: { Origin: "https://evil.example" } });
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "forbidden origin" });
+  }
+});
+
+test("requests addressed to any host but 127.0.0.1 or localhost are refused", async () => {
+  const port = bridge.server.port!;
+  expect(await rawGet(port, "/health", { Host: "evil.example" })).toEqual({ status: 403, body: JSON.stringify({ error: "bad host" }) });
+  expect((await rawGet(port, "/sessions", { Host: `evil.example:${port}`, ...H })).status).toBe(403);
+  expect((await rawGet(port, "/health", { Host: `localhost:${port}` })).status).toBe(200);
+  expect((await rawGet(port, "/health", { Host: `127.0.0.1:${port}` })).status).toBe(200);
 });

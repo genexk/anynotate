@@ -4,14 +4,15 @@ import { join, resolve } from "node:path";
 import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
-import { addOrigin, readOrigins, removeOrigin } from "./bridge/origins";
+import { runNativeHost } from "./agent/native-host";
+import { addOrigin, ORIGIN_RE, readOrigins, removeOrigin } from "./bridge/origins";
 import { createBridge } from "./bridge/server";
 import { loadOrCreateToken } from "./bridge/token";
 import { archiveOlderThan } from "./inbox/store";
 import { Agent } from "@anynotate/protocol";
 
-function writeAll(text: string) {
-  const buf = Buffer.from(text);
+function writeAll(data: string | Uint8Array) {
+  const buf = typeof data === "string" ? Buffer.from(data) : data;
   for (let off = 0; off < buf.length; ) {
     try {
       off += writeSync(1, buf, off);
@@ -27,7 +28,7 @@ const repo = resolve(import.meta.dir, "..");
 switch (cmd) {
   case "bridge": {
     const token = loadOrCreateToken();
-    const fromEnv = (process.env.ANYNOTATE_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const fromEnv = (process.env.ANYNOTATE_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter((s) => ORIGIN_RE.test(s));
     const origins = [...new Set([...fromEnv, ...readOrigins()])];
     const { server } = createBridge({ token, port: Number(process.env.ANYNOTATE_PORT ?? 47291), allowedOrigins: origins });
     const sweep = () => {
@@ -51,6 +52,16 @@ switch (cmd) {
       // Synchronous: process.exit would drop whatever an async pipe write had not flushed.
       if (out) writeAll(out);
     } catch {}
+    process.exit(0);
+  }
+  case "native-host": {
+    // stdout is Chrome's protocol channel here: only the reply frame goes to it, everything else to stderr.
+    try {
+      await runNativeHost(rest, Bun.stdin.stream(), writeAll);
+    } catch (err) {
+      console.error(`anynotate native-host: ${(err as Error).message}`);
+      process.exit(1);
+    }
     process.exit(0);
   }
   case "annotations":
@@ -80,6 +91,7 @@ switch (cmd) {
       if (sub === "add" && value) {
         console.log(addOrigin(value).added ? `added ${value}` : `already present ${value}`);
         console.log("Restart the bridge: launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge");
+        console.log("Re-run `anynotate install` so the Chrome helper allows it too.");
         break;
       }
       if (sub === "remove" && value) {
@@ -94,6 +106,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|origin <add <o>|list|remove <o>>>");
+    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>>");
     process.exit(cmd ? 1 : 0);
 }

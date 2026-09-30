@@ -34,6 +34,8 @@ test("planInstall targets Claude and Codex when installed, the Gemini cleanup, l
     "~/.gemini/commands/annotations.toml",
     "~/.anynotate",
     "origin",
+    "~/.anynotate/native-host",
+    "~/Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json",
     "~/Library/LaunchAgents/dev.anynotate.bridge.plist",
   ]);
   const plist = steps.at(-1)!.content;
@@ -278,4 +280,68 @@ test("without a readable extension-ids.json the origin step is skipped", () => {
   const log = applyInstall(planInstall({ home, anynotateBin: "/b", repo: "/nonexistent-repo", installed: ALL }), false);
   expect(log).toContain("skip    origin (no extension id in /nonexistent-repo/assets/extension-ids.json)");
   expect(existsSync(originsFile())).toBe(false);
+});
+
+const BUN = "/opt/bun/bin/bun";
+const wrapperPath = () => join(home, ".anynotate/native-host");
+const manifestPath = () => join(home, "Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json");
+const hostPlan = () => planInstall({ home, anynotateBin: "/repo/bin/anynotate", repo: process.cwd(), installed: ALL, bunPath: BUN });
+
+test("install writes the native-host wrapper owner-only with the absolute bun path", () => {
+  applyInstall(hostPlan(), false);
+  expect(readFileSync(wrapperPath(), "utf8")).toBe(`#!/bin/sh\nexec "${BUN}" "${process.cwd()}/src/cli.ts" native-host "$@"\n`);
+  expect(statSync(wrapperPath()).mode & 0o777).toBe(0o700);
+});
+
+test("the host manifest names the wrapper and allows pinned plus added extension ids", () => {
+  const dev = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
+  mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
+  writeFileSync(originsFile(), `${dev}\nhttps://recipes.example.com\n`, { mode: 0o600 });
+  applyInstall(hostPlan(), false);
+  const raw = readFileSync(manifestPath(), "utf8");
+  expect(raw.endsWith("}\n")).toBe(true);
+  expect(raw).toContain('\n  "name": "dev.anynotate.host"');
+  expect(JSON.parse(raw)).toEqual({
+    name: "dev.anynotate.host",
+    description: "Anynotate bridge helper",
+    path: wrapperPath(),
+    type: "stdio",
+    allowed_origins: [`${EXT_ORIGIN}/`, `${dev}/`],
+  });
+});
+
+test("the host manifest lists a pinned id once even when the origins file has it", () => {
+  mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
+  writeFileSync(originsFile(), `${EXT_ORIGIN}\n`, { mode: 0o600 });
+  applyInstall(hostPlan(), false);
+  expect(JSON.parse(readFileSync(manifestPath(), "utf8")).allowed_origins).toEqual([`${EXT_ORIGIN}/`]);
+});
+
+test("dry-run writes no helper files, and a re-run reports them ok", () => {
+  const dry = applyInstall(hostPlan(), true);
+  expect(dry).toContain(`would write ${wrapperPath()}`);
+  expect(dry).toContain(`would write ${manifestPath()}`);
+  expect(existsSync(wrapperPath())).toBe(false);
+  expect(existsSync(join(home, "Library/Application Support"))).toBe(false);
+  applyInstall(hostPlan(), false);
+  for (const dryRun of [true, false]) {
+    const log = applyInstall(hostPlan(), dryRun);
+    expect(log).toContain(`ok      ${wrapperPath()}`);
+    expect(log).toContain(`ok      ${manifestPath()}`);
+  }
+});
+
+test("a wrapper with the right content but loose permissions is tightened", () => {
+  applyInstall(hostPlan(), false);
+  chmodSync(wrapperPath(), 0o755);
+  expect(applyInstall(hostPlan(), true)).toContain(`would chmod 700 ${wrapperPath()}`);
+  expect(statSync(wrapperPath()).mode & 0o777).toBe(0o755);
+  expect(applyInstall(hostPlan(), false)).toContain(`chmod   700 ${wrapperPath()}`);
+  expect(statSync(wrapperPath()).mode & 0o777).toBe(0o700);
+});
+
+test("without any extension id the host manifest is skipped", () => {
+  const log = applyInstall(planInstall({ home, anynotateBin: "/b", repo: "/nonexistent-repo", installed: ALL, bunPath: BUN }), false);
+  expect(log).toContain(`skip    ${manifestPath()} (no extension id to allow)`);
+  expect(existsSync(manifestPath())).toBe(false);
 });

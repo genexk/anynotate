@@ -6,6 +6,7 @@ export type InstallStep = {
   path: string;
   action: "write" | "merge-json" | "symlink" | "private-dir" | "skip" | "remove-hook" | "remove-file" | "origin";
   content: string;
+  mode?: number;
 };
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -82,15 +83,26 @@ export function extensionOrigins(repo: string): string[] {
   }
 }
 
+export const NATIVE_HOST_NAME = "dev.anynotate.host";
+
+// Chrome starts native hosts with a minimal PATH, so the wrapper names bun by absolute path.
+export const nativeHostWrapper = (bunPath: string, repo: string) => `#!/bin/sh
+exec "${bunPath}" "${join(repo, "src/cli.ts")}" native-host "$@"
+`;
+
+export const nativeHostManifest = (wrapperPath: string, origins: string[]) =>
+  `${JSON.stringify({ name: NATIVE_HOST_NAME, description: "Anynotate bridge helper", path: wrapperPath, type: "stdio", allowed_origins: origins.map((o) => `${o}/`) }, null, 2)}\n`;
+
 export type InstallPlan = {
   home: string;
   anynotateBin: string;
   repo: string;
+  bunPath?: string;
   which?: (cli: string) => string | null;
   installed?: (cli: string) => boolean;
 };
 
-export function planInstall({ home, anynotateBin, repo, which = Bun.which, installed }: InstallPlan): InstallStep[] {
+export function planInstall({ home, anynotateBin, repo, bunPath = process.execPath, which = Bun.which, installed }: InstallPlan): InstallStep[] {
   const isInstalled = installed ?? ((cli: string) => which(cli) !== null || existsSync(join(home, `.${cli}`)));
   const hook = (agent: string, event: string) => JSON.stringify({ event, command: `anynotate hook --agent ${agent}` });
   const read = (rel: string) => (existsSync(join(repo, rel)) ? readFileSync(join(repo, rel), "utf8") : "");
@@ -109,6 +121,7 @@ export function planInstall({ home, anynotateBin, repo, which = Bun.which, insta
     { path: join(home, ".gemini/commands/annotations.toml"), action: "remove-file", content: read("assets/gemini/annotations.toml") },
     { path: join(home, ".anynotate"), action: "private-dir", content: "" },
     ...originSteps(home, repo),
+    ...nativeHostSteps(home, repo, bunPath),
     { path: join(home, `Library/LaunchAgents/${LAUNCHD_LABEL}.plist`), action: "write", content: launchdPlist(anynotateBin, home) },
   ];
 }
@@ -118,6 +131,19 @@ function originSteps(home: string, repo: string): InstallStep[] {
   return origins.length > 0
     ? origins.map((origin): InstallStep => ({ path: join(home, ".anynotate/origins"), action: "origin", content: origin }))
     : [{ path: "origin", action: "skip", content: `no extension id in ${join(repo, "assets/extension-ids.json")}` }];
+}
+
+// Allows the pinned ids plus any added with `anynotate origin add`, so re-running install picks up a dev id.
+function nativeHostSteps(home: string, repo: string, bunPath: string): InstallStep[] {
+  const wrapper = join(home, ".anynotate/native-host");
+  const manifest = join(home, `Library/Application Support/Google/Chrome/NativeMessagingHosts/${NATIVE_HOST_NAME}.json`);
+  const origins = [...new Set([...extensionOrigins(repo), ...readOrigins(join(home, ".anynotate/origins"))])];
+  return [
+    { path: wrapper, action: "write", content: nativeHostWrapper(bunPath, repo), mode: 0o700 },
+    origins.length > 0
+      ? { path: manifest, action: "write", content: nativeHostManifest(wrapper, origins) }
+      : { path: manifest, action: "skip", content: "no extension id to allow" },
+  ];
 }
 
 const lstatOrNull = (path: string) => {
@@ -182,11 +208,20 @@ export function applyInstall(steps: InstallStep[], dryRun: boolean, backupSuffix
       writeFileSync(s.path, `${JSON.stringify(config, null, 2)}\n`);
       log.push(`merged  ${what} → ${s.path}`);
     } else if (s.action === "write") {
-      if (existsSync(s.path) && readFileSync(s.path, "utf8") === s.content) { log.push(`ok      ${s.path}`); continue; }
+      const mode = s.mode;
+      if (existsSync(s.path) && readFileSync(s.path, "utf8") === s.content) {
+        if (mode === undefined || (lstatSync(s.path).mode & 0o777) === mode) { log.push(`ok      ${s.path}`); continue; }
+        const octal = mode.toString(8);
+        if (dryRun) { log.push(`would chmod ${octal} ${s.path}`); continue; }
+        chmodSync(s.path, mode);
+        log.push(`chmod   ${octal} ${s.path}`);
+        continue;
+      }
       if (dryRun) { log.push(`would write ${s.path}`); continue; }
       mkdirSync(dirname(s.path), { recursive: true });
       if (existsSync(s.path)) copyFileSync(s.path, `${s.path}${backupSuffix}`);
-      writeFileSync(s.path, s.content);
+      writeFileSync(s.path, s.content, mode === undefined ? undefined : { mode });
+      if (mode !== undefined) chmodSync(s.path, mode);
       log.push(`wrote   ${s.path}`);
     } else if (s.action === "private-dir") {
       // launchd opens the plist's log file here and never creates missing parent dirs.

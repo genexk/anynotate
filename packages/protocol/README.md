@@ -12,6 +12,8 @@ import { BundleInput, type Session } from "@anynotate/protocol";
 const parsed = BundleInput.safeParse(payload);
 ```
 
+Request/response examples for the extension-facing endpoints: `import { conformance } from "@anynotate/protocol/fixtures"`.
+
 Versions below 1.0 may change the wire format between minor releases.
 
 ## License

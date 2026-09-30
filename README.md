@@ -21,7 +21,7 @@ bin/anynotate install             # links ~/.local/bin/anynotate, adds hooks, wr
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.anynotate.bridge.plist
 ```
 
-`install --dry-run` lists what would be written to `~/.claude` and `~/.codex` (only if installed), `~/.anynotate/origins`, `~/.local/bin` and the launchd plist; the `launchctl` line starts the bridge.
+`install --dry-run` lists what would be written to `~/.claude` and `~/.codex` (only if installed), `~/.anynotate/origins`, `~/.local/bin`, the Chrome helper (`~/.anynotate/native-host` and `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json`) and the launchd plist; the `launchctl` line starts the bridge.
 
 ## Usage
 
@@ -45,13 +45,9 @@ An agent needs no Anynotate-specific setup to receive notes:
 
 The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt.
 
-### Pairing the extension
+### Extension access
 
-The bridge only answers browser requests from origins on its allow-list. `anynotate install` adds the Anynotate extension's origin (the ids in `assets/extension-ids.json`) to `~/.anynotate/origins`, so pairing needs only the token. Paste it into the extension's options page:
-
-```bash
-anynotate token
-```
+The Anynotate extension needs no copy-paste or pairing: `anynotate install` adds its id to `~/.anynotate/origins` and sets up a small Chrome helper (a native messaging host, `dev.anynotate.host`) that Chrome starts only for allow-listed extension ids. The extension fetches the token from that helper itself and sends it as `X-Anynotate-Token`, like every other caller. `anynotate token` prints the same token for the CLI and scripts. A development build of the extension has its own id; allow it with `anynotate origin add`, then re-run `anynotate install` so the helper allows it too. If the extension reports it can't reach the helper after you delete `~/.anynotate/token`, restart the bridge (`launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge`).
 
 To manage the allow-list by hand (the bridge reads the file at start):
 
@@ -62,17 +58,17 @@ anynotate origin remove chrome-extension://<id>
 launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge
 ```
 
-The allow-list is `ANYNOTATE_ALLOWED_ORIGINS` plus `$ANYNOTATE_HOME/origins`; the bridge prints it at startup.
+The allow-list is the valid `chrome-extension://` entries from `ANYNOTATE_ALLOWED_ORIGINS` and `$ANYNOTATE_HOME/origins`; the bridge prints it at startup.
 
-Every bridge route except `GET /health` needs the `X-Anynotate-Token` header. A bundle aimed at a herdr pane (`target.pane`) is typed into that pane once it is idle; anything else is queued and delivered by the hook on the session's next prompt.
+Every caller, the extension included, sends `X-Anynotate-Token: <anynotate token>` on every route except `/health`; an allow-listed `Origin` only earns CORS headers, since any local process can forge one. A bundle aimed at a herdr pane (`target.pane`) is typed into that pane once it is idle; anything else is queued and delivered by the hook on the session's next prompt.
 
 ### Environment
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ANYNOTATE_HOME` | `~/.anynotate` | Token, inbox (`$ANYNOTATE_HOME/inbox`) and session state |
+| `ANYNOTATE_HOME` | `~/.anynotate` | Token, inbox (`$ANYNOTATE_HOME/inbox`) and session state. The Chrome helper always uses `~/.anynotate`; with a custom `ANYNOTATE_HOME` the extension cannot get the bridge's token |
 | `ANYNOTATE_PORT` | `47291` | Bridge port (always bound to `127.0.0.1`) |
-| `ANYNOTATE_ALLOWED_ORIGINS` | none | Comma-separated browser origins allowed to call the bridge, e.g. `chrome-extension://<id>`, in addition to those in `$ANYNOTATE_HOME/origins`. Requests without an `Origin` header need only the token |
+| `ANYNOTATE_ALLOWED_ORIGINS` | none | Comma-separated `chrome-extension://<id>` origins added to the allow-list, in addition to those in `$ANYNOTATE_HOME/origins`; other entries are ignored. An allowed origin gets CORS headers; the token is still required |
 | `ANYNOTATE_HERDR` | `herdr` | herdr binary used to list and prompt panes |
 
 ### Sending a bundle by hand

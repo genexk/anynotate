@@ -51,7 +51,7 @@ test("the bridge CLI merges env and file origins", async () => {
   addOrigin(shared);
   const port = 48000 + Math.floor(Math.random() * 1000);
   const proc = Bun.spawn(["./bin/anynotate", "bridge"], {
-    env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: String(port), ANYNOTATE_ALLOWED_ORIGINS: `chrome-extension://pppppppppppppppppppppppppppppppp, ${shared}` },
+    env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: String(port), ANYNOTATE_ALLOWED_ORIGINS: `chrome-extension://pppppppppppppppppppppppppppppppp, ${shared}, http://localhost:3000, null, *` },
     stdout: "pipe",
   });
   try {
@@ -59,6 +59,9 @@ test("the bridge CLI merges env and file origins", async () => {
     expect(line).toContain(`chrome-extension://${id}`);
     expect(line).toContain("chrome-extension://pppppppppppppppppppppppppppppppp");
     expect(line.split(shared).length).toBe(2);
+    for (const bad of ["http://localhost:3000", "null", "*"]) expect(line).not.toContain(bad);
+    const r = await fetch(`http://127.0.0.1:${port}/sessions`, { headers: { Origin: "http://localhost:3000" } });
+    expect(r.status).toBe(403);
   } finally {
     proc.kill();
     await proc.exited;

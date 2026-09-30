@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { Agent, BundleInput, type HealthResponse, PROTOCOL_MIN, PROTOCOL_VERSION, type Session } from "@anynotate/protocol";
+import pkg from "../../package.json";
 import { listSeen } from "../inbox/seen";
 import { readBundle, readStatus, updateStatus, writeBundle } from "../inbox/store";
-import { Agent, BundleInput, type Session } from "@anynotate/protocol";
 import { listPanes as herdrListPanes, type Pane, promptPane, waitIdle } from "./herdr";
 import { Registry } from "./registry";
 import { route, type RouteDeps } from "./router";
@@ -19,6 +20,19 @@ type Opts = {
   listPanes?: () => Promise<Pane[]>;
   routeWaitMs?: number;
 };
+
+function sameToken(given: string | null, token: string): boolean {
+  if (!given) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// DNS rebinding: a page on evil.example can resolve its own name to 127.0.0.1, but its requests still say Host: evil.example.
+const hostAllowed = (host: string | null, port: number | undefined) =>
+  port !== undefined && (host === `127.0.0.1:${port}` || host === `localhost:${port}`);
+
+const HEALTH: HealthResponse = { ok: true, bridgeVersion: pkg.version, protocol: { version: PROTOCOL_VERSION, min: PROTOCOL_MIN } };
 
 export function createBridge(opts: Opts) {
   if (!opts.token) throw new Error("empty token");
@@ -47,37 +61,38 @@ export function createBridge(opts: Opts) {
     port: opts.port ?? 47291,
     maxRequestBodySize: MAX_BODY,
     idleTimeout: 0,
-    async fetch(req) {
+    async fetch(req, srv) {
+      if (!hostAllowed(req.headers.get("host"), srv.port)) return Response.json({ error: "bad host" }, { status: 403 });
       const url = new URL(req.url);
       const origin = req.headers.get("origin");
       const h = cors(origin);
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: h });
 
-      if (origin && !allowed.has(origin)) return new Response("forbidden origin", { status: 403 });
+      if (origin && !allowed.has(origin)) return Response.json({ error: "forbidden origin" }, { status: 403 });
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
-      if (url.pathname === "/health") return json({ ok: true });
-      if (req.headers.get("x-anynotate-token") !== opts.token) return json({ error: "bad token" }, 401);
+      if (url.pathname === "/health") return json(HEALTH);
+      // Any local process can forge an allowed Origin, so the Origin only earns CORS headers; the token is still required.
+      if (!sameToken(req.headers.get("x-anynotate-token"), opts.token)) return json({ error: "bad token" }, 401);
 
       const parts = url.pathname.split("/").filter(Boolean);
       try {
-        if (req.method === "GET" && url.pathname === "/sessions") {
+        if ((req.method === "GET" || req.method === "POST") && url.pathname === "/sessions") {
           const push = registry.live();
           const pushIds = new Set(push.map((s) => s.id));
           const seen = listSeen();
-          // A pane belongs to its newest seen session of the same agent (listSeen is newest first); older sessions
-          // that once ran there have exited, so they stay next-prompt entries instead of being delivered to the pane.
-          const inPane = new Set<string>();
+          // A pane belongs to its newest seen session of the same agent (listSeen is newest first).
           const herdr: Session[] = (await listPanes()).map((p) => {
             const owner = seen.find((s) => s.pane === p.pane && s.agent === p.agent);
-            if (owner) inPane.add(`${owner.agent}:${owner.sessionId}`);
             return {
               id: p.pane, agent: p.agent, cwd: p.cwd, title: p.title, method: "herdr", pane: p.pane,
               ...(owner ? { sessionIds: [owner.sessionId] } : {}),
             };
           });
+          // A session tied to a herdr pane is that pane's owner (already listed as the pane) or an exited/child run
+          // that will never take another prompt, so only sessions outside herdr are offered for next-prompt delivery.
           const next: Session[] = seen
-            .filter((s) => !pushIds.has(s.sessionId) && !inPane.has(`${s.agent}:${s.sessionId}`))
-            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: "", method: "next-prompt", ...(s.pane ? { pane: s.pane } : {}) }));
+            .filter((s) => !s.pane && !pushIds.has(s.sessionId))
+            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: "", method: "next-prompt" }));
           return json([...push, ...herdr, ...next]);
         }
 
@@ -101,6 +116,15 @@ export function createBridge(opts: Opts) {
         }
 
         if (req.method === "GET" && parts[0] === "bundles" && parts.length === 2) {
+          const id = parts[1]!;
+          try {
+            return json({ bundle: readBundle(id), status: readStatus(id) });
+          } catch {
+            return json({ error: "not found" }, 404);
+          }
+        }
+
+        if (req.method === "POST" && parts[0] === "bundles" && parts.length === 3 && parts[2] === "status") {
           const id = parts[1]!;
           try {
             return json({ bundle: readBundle(id), status: readStatus(id) });
