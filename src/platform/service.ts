@@ -1,12 +1,12 @@
 import { posix, win32 } from "node:path";
-import type { Exec } from "./exec";
+import type { Exec, ExecResult } from "./exec";
 import type { Env, Platform } from "./os";
 
 export const LAUNCHD_LABEL = "dev.anynotate.bridge";
 export const SYSTEMD_UNIT = "anynotate-bridge.service";
 export const WINDOWS_TASK = "Anynotate Bridge";
 
-export type ServiceFile = { path: string; content: string; mode?: number };
+export type ServiceFile = { path: string; content: string; mode?: number; encoding?: "utf8" | "utf16le-bom" };
 // start/stop/remove are command sequences for runSteps; status is a single command whose exit code answers "running?".
 export type ServicePlan = { files: ServiceFile[]; start: string[][]; stop: string[][]; remove: string[][]; status: string[] };
 
@@ -110,7 +110,7 @@ function autostart(o: ServiceOptions): ServicePlan {
   const content = `[Desktop Entry]
 Type=Application
 Name=Anynotate bridge
-Exec=${[...o.exe, "bridge"].map(desktopArg).join(" ")}
+Exec=${[...o.exe, "bridge", "--detach"].map(desktopArg).join(" ")}
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
 `;
@@ -124,21 +124,23 @@ X-GNOME-Autostart-enabled=true
   };
 }
 
-// Task Scheduler starts a console program in a visible window; wscript running Run(..., 0) hides it.
+const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+
+// The per-user Run key starts the bridge at logon without elevation; wscript running Run(..., 0) keeps the console
+// window hidden, and the bridge detaches and manages its own pid file for stop/status. The script is written as
+// UTF-16LE with a BOM, the encoding wscript reads non-ASCII profile paths correctly from.
 function windows(o: ServiceOptions): ServicePlan {
   const path = win32.join(o.dataDir, "bridge.vbs");
-  const command = `${o.exe.map((a) => `"${a}"`).join(" ")} bridge`;
+  const wscript = win32.join(o.env.SystemRoot ?? o.env.SYSTEMROOT ?? "C:\\Windows", "System32", "wscript.exe");
+  const command = `${o.exe.map((a) => `"${a}"`).join(" ")} bridge --detach`;
   const content = `CreateObject("WScript.Shell").Run "${command.replace(/"/g, '""')}", 0, False\r\n`;
-  const end = ["schtasks", "/End", "/TN", WINDOWS_TASK];
+  const stop = [...o.exe, "bridge", "--stop"];
   return {
-    files: [{ path, content }],
-    start: [
-      ["schtasks", "/Create", "/F", "/TN", WINDOWS_TASK, "/SC", "ONLOGON", "/RL", "LIMITED", "/TR", `wscript.exe "${path}"`],
-      ["schtasks", "/Run", "/TN", WINDOWS_TASK],
-    ],
-    stop: [end],
-    remove: [end, ["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK]],
-    status: ["schtasks", "/Query", "/TN", WINDOWS_TASK],
+    files: [{ path, content, encoding: "utf16le-bom" }],
+    start: [["reg", "add", RUN_KEY, "/v", WINDOWS_TASK, "/t", "REG_SZ", "/d", `"${wscript}" "${path}"`, "/f"], [wscript, path]],
+    stop: [stop],
+    remove: [stop, ["reg", "delete", RUN_KEY, "/v", WINDOWS_TASK, "/f"]],
+    status: [...o.exe, "bridge", "--status"],
   };
 }
 
@@ -156,15 +158,19 @@ export function planService(o: ServiceOptions): ServicePlan {
 
 export const detectUserSystemd = (exec: Exec): boolean => exec(["systemctl", "--user", "show-environment"]).code === 0;
 
-// Unloading a service that isn't loaded, or ending a task that isn't running, fails harmlessly.
-export const tolerateNotRunning = (argv: string[]): boolean =>
-  (argv[0] === "launchctl" && argv[1] === "bootout") || (argv[0] === "schtasks" && argv[1] === "/End");
+// Failures that leave the system in the state the step was after: unloading a service or stopping a bridge that
+// isn't running, deleting a Run value that isn't there. A bootstrap straight after bootout can fail with an I/O
+// error while launchd finishes tearing down; the kickstart that follows is the step that must succeed.
+export const tolerateNotRunning = (argv: string[], r: ExecResult): boolean =>
+  (argv[0] === "launchctl" && (argv[1] === "bootout" || argv[1] === "bootstrap")) ||
+  (argv.at(-2) === "bridge" && argv.at(-1) === "--stop") ||
+  (argv[0] === "reg" && argv[1] === "delete" && /unable to find/i.test(r.stderr + r.stdout));
 
 export function runSteps(
   steps: string[][],
   exec: Exec,
   dryRun: boolean,
-  tolerate: (argv: string[]) => boolean = tolerateNotRunning,
+  tolerate: (argv: string[], r: ExecResult) => boolean = tolerateNotRunning,
 ): { log: string[]; ok: boolean } {
   const log: string[] = [];
   for (const argv of steps) {
@@ -176,7 +182,7 @@ export function runSteps(
     const r = exec(argv);
     if (r.code === 0) {
       log.push(`ran: ${line}`);
-    } else if (tolerate(argv)) {
+    } else if (tolerate(argv, r)) {
       log.push(`ignored failure (exit ${r.code}): ${line}`);
     } else {
       log.push(`failed (exit ${r.code}): ${line}${r.stderr.trim() ? `: ${r.stderr.trim()}` : ""}`);

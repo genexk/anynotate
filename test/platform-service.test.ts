@@ -100,7 +100,7 @@ test("linux without user systemd: an XDG autostart entry and the bridge's own de
   expect(plan.files.map((f) => f.path)).toEqual(["/xdg/autostart/anynotate-bridge.desktop"]);
   const c = plan.files[0]!.content;
   expect(c).toContain("[Desktop Entry]");
-  expect(c).toContain(`Exec=${BIN} bridge\n`);
+  expect(c).toContain(`Exec=${BIN} bridge --detach\n`);
   expect(c).toContain("X-GNOME-Autostart-enabled=true");
   expect(plan.start).toEqual([[BIN, "bridge", "--detach"]]);
   expect(plan.stop).toEqual([[BIN, "bridge", "--stop"]]);
@@ -110,33 +110,42 @@ test("linux without user systemd: an XDG autostart entry and the bridge's own de
 
 test("linux autostart: Exec quotes arguments per the desktop-entry spec", () => {
   const plan = planService({ ...base, platform: "linux", home: "/home/me", hasUserSystemd: false, exe: ["/home/me/my bun/bun", "/src/50%/a$b/cli.ts"] });
-  expect(plan.files[0]!.content).toContain('Exec="/home/me/my bun/bun" "/src/50%%/a\\\\$b/cli.ts" bridge\n');
+  expect(plan.files[0]!.content).toContain('Exec="/home/me/my bun/bun" "/src/50%%/a\\\\$b/cli.ts" bridge --detach\n');
 });
 
 const WIN = { ...base, platform: "win32" as const, home: "C:\\Users\\me", dataDir: "C:\\Users\\me\\.anynotate", logPath: "C:\\Users\\me\\.anynotate\\bridge.log" };
 
-test("win32: a hidden vbs launcher and a Task Scheduler logon task", () => {
+const RUN = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+
+test("win32: a hidden UTF-16 vbs launcher registered under the per-user Run key", () => {
   const exe = "C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe";
-  const plan = planService({ ...WIN, exe: [exe] });
+  const plan = planService({ ...WIN, exe: [exe], env: { SystemRoot: "D:\\Win" } });
   const vbs = "C:\\Users\\me\\.anynotate\\bridge.vbs";
-  expect(plan.files.map((f) => f.path)).toEqual([vbs]);
-  expect(plan.files[0]!.content).toContain(`CreateObject("WScript.Shell").Run """${exe}"" bridge", 0, False`);
+  expect(plan.files.map((f) => [f.path, f.encoding])).toEqual([[vbs, "utf16le-bom"]]);
+  expect(plan.files[0]!.content).toContain(`CreateObject("WScript.Shell").Run """${exe}"" bridge --detach", 0, False`);
+  const wscript = "D:\\Win\\System32\\wscript.exe";
   expect(plan.start).toEqual([
-    ["schtasks", "/Create", "/F", "/TN", "Anynotate Bridge", "/SC", "ONLOGON", "/RL", "LIMITED", "/TR", `wscript.exe "${vbs}"`],
-    ["schtasks", "/Run", "/TN", "Anynotate Bridge"],
+    ["reg", "add", RUN, "/v", "Anynotate Bridge", "/t", "REG_SZ", "/d", `"${wscript}" "${vbs}"`, "/f"],
+    [wscript, vbs],
   ]);
-  expect(plan.stop).toEqual([["schtasks", "/End", "/TN", "Anynotate Bridge"]]);
+  expect(plan.stop).toEqual([[exe, "bridge", "--stop"]]);
   expect(plan.remove).toEqual([
-    ["schtasks", "/End", "/TN", "Anynotate Bridge"],
-    ["schtasks", "/Delete", "/F", "/TN", "Anynotate Bridge"],
+    [exe, "bridge", "--stop"],
+    ["reg", "delete", RUN, "/v", "Anynotate Bridge", "/f"],
   ]);
-  expect(plan.status).toEqual(["schtasks", "/Query", "/TN", "Anynotate Bridge"]);
+  expect(plan.status).toEqual([exe, "bridge", "--status"]);
+});
+
+test("win32: wscript comes from SYSTEMROOT, then C:\\Windows", () => {
+  const wscript = (env: Record<string, string>) => planService({ ...WIN, env }).start[1]![0];
+  expect(wscript({ SYSTEMROOT: "E:\\W" })).toBe("E:\\W\\System32\\wscript.exe");
+  expect(wscript({})).toBe("C:\\Windows\\System32\\wscript.exe");
 });
 
 test("win32: a source install quotes each exe element in the vbs", () => {
   const plan = planService({ ...WIN, exe: ["C:\\Program Files\\bun\\bun.exe", "C:\\src\\cli.ts"] });
   expect(plan.files[0]!.content).toContain(
-    'CreateObject("WScript.Shell").Run """C:\\Program Files\\bun\\bun.exe"" ""C:\\src\\cli.ts"" bridge", 0, False',
+    'CreateObject("WScript.Shell").Run """C:\\Program Files\\bun\\bun.exe"" ""C:\\src\\cli.ts"" bridge --detach", 0, False',
   );
 });
 
@@ -149,23 +158,41 @@ test("detectUserSystemd asks systemctl --user show-environment", () => {
 
 const darwinPlan = (): ServicePlan => planService({ ...base, platform: "darwin", home: "/Users/me" });
 
-test("runSteps tolerates a failed bootout and stops at the first other failure", () => {
+test("runSteps tolerates a failed bootout and bootstrap when kickstart succeeds", () => {
   const { start } = darwinPlan();
-  const bootout = start[0]!.join(" ");
-  const bootstrap = start[1]!.join(" ");
-  const f = fakeExec({ [bootout]: 3, [bootstrap]: 5 });
+  const f = fakeExec({ [start[0]!.join(" ")]: 3, [start[1]!.join(" ")]: 5 });
   const r = runSteps(start, f.exec, false);
-  expect(r.ok).toBe(false);
-  expect(f.calls).toEqual([start[0]!, start[1]!]);
-  expect(r.log.join("\n")).toContain("bootstrap");
+  expect(r.ok).toBe(true);
+  expect(f.calls).toEqual(start);
 });
 
-test("runSteps runs everything when all succeed, and tolerates schtasks /End", () => {
+test("runSteps fails when kickstart fails, even as the last step", () => {
+  const { start } = darwinPlan();
+  const f = fakeExec({ [start[2]!.join(" ")]: 1 });
+  const r = runSteps(start, f.exec, false);
+  expect(r.ok).toBe(false);
+  expect(r.log.at(-1)).toContain("kickstart");
+});
+
+test("runSteps stops at the first intolerable failure", () => {
+  const plan = planService({ ...base, platform: "linux", home: "/home/me" });
+  const f = fakeExec({ [plan.start[0]!.join(" ")]: 1 });
+  expect(runSteps(plan.start, f.exec, false).ok).toBe(false);
+  expect(f.calls).toEqual([plan.start[0]!]);
+});
+
+test("runSteps on win32 remove tolerates a stopped bridge and a missing Run value, not other reg errors", () => {
   const plan = planService({ ...WIN, exe: ["C:\\a\\anynotate.exe"] });
-  const f = fakeExec({ [plan.remove[0]!.join(" ")]: 1 });
-  const r = runSteps(plan.remove, f.exec, false);
-  expect(r.ok).toBe(true);
-  expect(f.calls).toEqual(plan.remove);
+  const [stop, del] = plan.remove.map((s) => s.join(" "));
+  const run = (stderr: string) => {
+    const calls: string[][] = [];
+    const exec: Exec = (argv) => (calls.push(argv), { code: 1, stdout: "", stderr: argv.join(" ") === del ? stderr : "" });
+    return { ok: runSteps(plan.remove, exec, false).ok, calls };
+  };
+  const missing = run("ERROR: The system was unable to find the specified registry key or value.");
+  expect(missing).toEqual({ ok: true, calls: plan.remove });
+  expect(run("ERROR: Access is denied.").ok).toBe(false);
+  expect(stop).toContain("--stop");
 });
 
 test("runSteps in dry-run mode only logs", () => {
