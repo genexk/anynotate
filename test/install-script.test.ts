@@ -8,10 +8,8 @@ import { join } from "node:path";
 const repo = join(import.meta.dir, "..");
 const installSh = join(repo, "scripts", "install.sh");
 const installPs1 = join(repo, "scripts", "install.ps1");
-const which = (cmd: string) => {
-  const r = spawnSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim() : null;
-};
+// Bun.which, not `sh -c "command -v"`: under Git Bash that prints /c/... paths that a native spawn cannot run.
+const which = (cmd: string) => Bun.which(cmd);
 const posix = process.platform !== "win32";
 const dash = posix ? which("dash") : null;
 const pwsh = which("pwsh");
