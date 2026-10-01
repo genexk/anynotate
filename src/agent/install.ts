@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { addOrigin, ORIGIN_RE, readOrigins } from "../bridge/origins";
 import { planNativeHost, sourceHostWrapper } from "../platform/nativehost";
 import type { Platform } from "../platform/os";
+import { LAUNCHD_LABEL } from "../platform/service";
 
 export type InstallStep = {
   path: string;
@@ -47,7 +48,7 @@ export function removeHook(config: any, command: string): { config: any; changed
   return { config: changed ? next : config, changed };
 }
 
-export const LAUNCHD_LABEL = "dev.anynotate.bridge";
+export { LAUNCHD_LABEL };
 
 export const launchdPlist = (anynotateBin: string, home: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
