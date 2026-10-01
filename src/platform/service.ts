@@ -170,11 +170,18 @@ export const tolerateNotRunning = (argv: string[], r: ExecResult): boolean =>
   (argv[0] === "launchctl" && (argv[1] === "bootout" || argv[1] === "bootstrap")) ||
   (argv.at(-2) === "bridge" && argv.at(-1) === "--stop");
 
+// launchd can still be tearing the old job down when bootstrap runs, so bootstrap gets a few more tries before its
+// failure is tolerated and kickstart decides.
+export const retriesFor = (argv: string[]): number => (argv[0] === "launchctl" && argv[1] === "bootstrap" ? 3 : 0);
+
+export type RetryOptions = { retries?: (argv: string[]) => number; pause?: (ms: number) => void; delayMs?: number };
+
 export function runSteps(
   steps: string[][],
   exec: Exec,
   dryRun: boolean,
   tolerate: (argv: string[], r: ExecResult) => boolean = tolerateNotRunning,
+  { retries = retriesFor, pause = Bun.sleepSync, delayMs = 500 }: RetryOptions = {},
 ): { log: string[]; ok: boolean } {
   const log: string[] = [];
   for (const argv of steps) {
@@ -188,7 +195,12 @@ export function runSteps(
       log.push(`already gone: ${line}`);
       continue;
     }
-    const r = exec(argv);
+    let r = exec(argv);
+    for (let left = retries(argv); r.code !== 0 && left > 0; left--) {
+      log.push(`retrying (exit ${r.code}): ${line}`);
+      pause(delayMs);
+      r = exec(argv);
+    }
     if (r.code === 0) {
       log.push(`ran: ${line}`);
     } else if (tolerate(argv, r)) {

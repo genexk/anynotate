@@ -173,9 +173,30 @@ const darwinPlan = (): ServicePlan => planService({ ...base, platform: "darwin",
 test("runSteps tolerates a failed bootout and bootstrap when kickstart succeeds", () => {
   const { start } = darwinPlan();
   const f = fakeExec({ [start[0]!.join(" ")]: 3, [start[1]!.join(" ")]: 5 });
-  const r = runSteps(start, f.exec, false);
+  const pauses: number[] = [];
+  const r = runSteps(start, f.exec, false, undefined, { pause: (ms) => pauses.push(ms) });
   expect(r.ok).toBe(true);
-  expect(f.calls).toEqual(start);
+  expect(f.calls).toEqual([start[0]!, start[1]!, start[1]!, start[1]!, start[1]!, start[2]!]);
+  expect(pauses).toEqual([500, 500, 500]);
+  expect(r.log.filter((l) => l.startsWith("retrying (exit 5): launchctl bootstrap"))).toHaveLength(3);
+  expect(r.log).toContain(`ignored failure (exit 5): ${start[1]!.join(" ")}`);
+});
+
+test("runSteps retries bootstrap until it succeeds and retries nothing else", () => {
+  const { start } = darwinPlan();
+  const calls: string[][] = [];
+  let bootstraps = 0;
+  const exec: Exec = (argv) => {
+    calls.push(argv);
+    if (argv[1] === "bootstrap") return { code: ++bootstraps < 3 ? 5 : 0, stdout: "", stderr: "" };
+    return { code: argv[1] === "bootout" ? 3 : 0, stdout: "", stderr: "" };
+  };
+  const pauses: number[] = [];
+  const r = runSteps(start, exec, false, undefined, { pause: (ms) => pauses.push(ms), delayMs: 7 });
+  expect(r.ok).toBe(true);
+  expect(calls).toEqual([start[0]!, start[1]!, start[1]!, start[1]!, start[2]!]);
+  expect(pauses).toEqual([7, 7]);
+  expect(r.log).toContain(`ran: ${start[1]!.join(" ")}`);
 });
 
 test("runSteps fails when kickstart fails, even as the last step", () => {
