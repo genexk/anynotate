@@ -198,6 +198,12 @@ test("sourceHostWrapper is a sh script on unix and a cmd file on Windows", () =>
   });
 });
 
+test("the Windows wrapper escapes % in paths so cmd does not expand them", () => {
+  expect(sourceHostWrapper("win32", "C:\\100%\\bun.exe", "C:\\src\\%USERNAME%", "C:\\Users\\me\\.anynotate").content).toBe(
+    `@"C:\\100%%\\bun.exe" "C:\\src\\%%USERNAME%%\\src\\cli.ts" native-host %*\r\n`,
+  );
+});
+
 const bin = join(import.meta.dir, "../bin/anynotate");
 
 test("the CLI answers as a native host when Chrome passes the origin first", async () => {
@@ -212,6 +218,25 @@ test("the CLI answers as a native host when Chrome passes the origin first", asy
     const out = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
     expect(await proc.exited).toBe(0);
     expect(decodeMessage(out)!.value).toEqual({ ok: true, token: readFileSync(join(home, "token"), "utf8").trim() });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("the CLI refuses a disallowed origin and creates no token", async () => {
+  const home = mkdtempSync(join(tmpdir(), "anynotate-"));
+  try {
+    writeFileSync(join(home, "origins"), `chrome-extension://${ID}\n`);
+    const other = "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/";
+    const proc = Bun.spawn([bin, other, "--parent-window=0"], {
+      stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
+    });
+    proc.stdin.write(encodeMessage({ type: "token" }));
+    await proc.stdin.flush();
+    const out = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
+    await proc.exited;
+    expect(decodeMessage(out)!.value).toEqual({ ok: false, error: "origin not allowed" });
+    expect(existsSync(join(home, "token"))).toBe(false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

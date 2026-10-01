@@ -12,14 +12,19 @@ const OTHER = "2026-10-02T080000-efgh";
 
 let dir: string;
 let savedUser: string | undefined;
+let savedDomain: string | undefined;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "anynotate-files-"));
   savedUser = process.env.USERNAME;
+  savedDomain = process.env.USERDOMAIN;
+  delete process.env.USERDOMAIN;
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
   if (savedUser === undefined) delete process.env.USERNAME;
   else process.env.USERNAME = savedUser;
+  if (savedDomain === undefined) delete process.env.USERDOMAIN;
+  else process.env.USERDOMAIN = savedDomain;
 });
 
 const mode = (p: string) => statSync(p).mode & 0o777;
@@ -68,6 +73,27 @@ test("makePrivateDir on Windows strips inheritance and grants only the current u
   makePrivateDir(d, "win32", exec);
   expect(existsSync(d)).toBe(true);
   expect(calls).toEqual([["icacls", d, "/inheritance:r", "/grant:r", "me:(OI)(CI)F"]]);
+});
+
+test("makePrivateDir on Windows restricts an existing dir once per process", () => {
+  process.env.USERNAME = "me";
+  const { exec, calls } = recorder();
+  const d = join(dir, "existing");
+  mkdirSync(d);
+  makePrivateDir(d, "win32", exec);
+  makePrivateDir(d, "win32", exec);
+  expect(calls).toEqual([["icacls", d, "/inheritance:r", "/grant:r", "me:(OI)(CI)F"]]);
+});
+
+test("the Windows grantee is DOMAIN\\user when USERDOMAIN is set", () => {
+  process.env.USERNAME = "me";
+  process.env.USERDOMAIN = "DESKTOP-1";
+  const { exec, calls } = recorder();
+  const f = join(dir, "token");
+  writePrivateFile(f, "x", "win32", exec);
+  expect(calls[0]?.at(-1)).toBe("DESKTOP-1\\me:F");
+  makePrivateDir(join(dir, "d"), "win32", exec);
+  expect(calls[1]?.at(-1)).toBe("DESKTOP-1\\me:(OI)(CI)F");
 });
 
 test("makePrivateDir on Windows ignores an icacls failure", () => {

@@ -7,14 +7,22 @@ import { currentPlatform, type Platform } from "./os";
 function restrictToUser(path: string, grant: string, exec: Exec): void {
   const user = process.env.USERNAME;
   if (!user) return;
-  exec(["icacls", path, "/inheritance:r", "/grant:r", `${user}:${grant}`]);
+  const domain = process.env.USERDOMAIN;
+  exec(["icacls", path, "/inheritance:r", "/grant:r", `${domain ? `${domain}\\${user}` : user}:${grant}`]);
 }
+
+// Dirs whose ACL this process has already rewritten.
+const restricted = new Set<string>();
 
 // Bundles hold private page content, so every anynotate dir is owner-only whichever writer runs first.
 export function makePrivateDir(dir: string, p: Platform = currentPlatform(), exec: Exec = spawnExec): string {
   if (p === "win32") {
-    // Only on creation: an ACL rewrite spawns a process, and this runs on every inbox access.
-    if (mkdirSync(dir, { recursive: true }) !== undefined) restrictToUser(dir, "(OI)(CI)F", exec);
+    // Once per dir per process: an ACL rewrite spawns a process, and this runs on every inbox access.
+    mkdirSync(dir, { recursive: true });
+    if (!restricted.has(dir)) {
+      restricted.add(dir);
+      restrictToUser(dir, "(OI)(CI)F", exec);
+    }
     return dir;
   }
   mkdirSync(dir, { recursive: true, mode: 0o700 });

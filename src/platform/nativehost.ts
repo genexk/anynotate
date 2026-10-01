@@ -58,11 +58,14 @@ export function planNativeHostRemoval(o: HostTarget): HostStep[] {
   return BROWSERS.map((b) => ({ kind: "remove-manifest", path: unixManifest(o, b) }));
 }
 
+// Quoted for a .cmd file, where % would otherwise start a variable expansion.
+export const cmdArgv = (argv: string[]) => argv.map((a) => `"${a.replace(/%/g, "%%")}"`).join(" ");
+
 // A source install has no binary for Chrome to launch, so a wrapper runs the CLI under bun.
 // Chrome starts hosts with a minimal PATH, so bun is named by absolute path.
 export function sourceHostWrapper(platform: Platform, bun: string, repo: string, dataDir: string): { path: string; content: string } {
   if (platform === "win32") {
-    return { path: win32.join(dataDir, "native-host.cmd"), content: `@"${bun}" "${win32.join(repo, "src", "cli.ts")}" native-host %*\r\n` };
+    return { path: win32.join(dataDir, "native-host.cmd"), content: `@${cmdArgv([bun, win32.join(repo, "src", "cli.ts")])} native-host %*\r\n` };
   }
   return { path: posix.join(dataDir, "native-host"), content: `#!/bin/sh\nexec "${bun}" "${posix.join(repo, "src/cli.ts")}" native-host "$@"\n` };
 }
