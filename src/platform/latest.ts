@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { BUNDLE_ID } from "@anynotate/protocol";
 import { currentPlatform, type Platform } from "./os";
@@ -7,13 +7,27 @@ export const LATEST = "latest";
 // Not "LATEST": macOS and Windows file systems are case-insensitive, so that name would collide with the link.
 export const LATEST_ID_FILE = "latest-id";
 
-const isLink = (path: string) => {
+export const isLink = (path: string) => {
   try {
     return lstatSync(path).isSymbolicLink();
   } catch {
     return false;
   }
 };
+
+// Bun's rmSync fails on a Windows junction with EFAULT; unlink, or rmdir where unlink refuses a directory link,
+// removes only the link and never the directory it points at.
+export function removeLink(path: string): void {
+  if (!isLink(path)) return;
+  try {
+    unlinkSync(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    rmdirSync(path);
+  }
+}
+
+const removeTmp = (tmp: string) => (isLink(tmp) ? removeLink(tmp) : rmSync(tmp, { force: true }));
 
 function writeIdFile(inboxDir: string, id: string): void {
   const path = join(inboxDir, LATEST_ID_FILE);
@@ -32,7 +46,7 @@ function writeLink(inboxDir: string, id: string, p: Platform): void {
   const link = join(inboxDir, LATEST);
   const tmp = `${link}.tmp-${process.pid}`;
   try {
-    rmSync(tmp, { force: true });
+    removeTmp(tmp);
     if (p === "win32") symlinkSync(resolve(inboxDir, id), tmp, "junction");
     else symlinkSync(id, tmp);
     try {
@@ -40,13 +54,17 @@ function writeLink(inboxDir: string, id: string, p: Platform): void {
     } catch (err) {
       // Windows will not rename over an existing junction; drop the old one first.
       if (p !== "win32" || !isLink(link)) throw err;
-      unlinkSync(link);
+      removeLink(link);
       renameSync(tmp, link);
     }
   } catch (err) {
-    rmSync(tmp, { force: true });
+    try {
+      removeTmp(tmp);
+    } catch {}
     // A link left pointing at an older bundle would win over the id file, so it goes.
-    if (isLink(link)) rmSync(link, { force: true });
+    try {
+      removeLink(link);
+    } catch {}
     console.error(`anynotate: could not update ${link}:`, err);
   }
 }
@@ -64,7 +82,7 @@ export function writeLatest(inboxDir: string, id: string, p: Platform = currentP
 export function clearLatest(inboxDir: string): void {
   try {
     const link = join(inboxDir, LATEST);
-    if (isLink(link)) rmSync(link, { force: true });
+    removeLink(link);
     rmSync(join(inboxDir, LATEST_ID_FILE), { force: true });
   } catch (err) {
     console.error(`anynotate: could not clear ${join(inboxDir, LATEST)}:`, err);
