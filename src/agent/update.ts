@@ -1,7 +1,8 @@
 import { join } from "node:path";
+import type { Exec } from "../platform/exec";
 import { LAUNCHD_LABEL } from "./install";
 
-export type Exec = (argv: string[], cwd?: string) => { code: number; stdout: string; stderr: string };
+export { type Exec, spawnExec } from "../platform/exec";
 
 export type UpdateOptions = {
   repo: string;
@@ -11,15 +12,6 @@ export type UpdateOptions = {
   log: (line: string) => void;
   err: (line: string) => void;
   readVersion: () => string;
-};
-
-export const spawnExec: Exec = (argv, cwd) => {
-  try {
-    const proc = Bun.spawnSync(argv, { cwd, stdout: "pipe", stderr: "pipe" });
-    return { code: proc.exitCode ?? 1, stdout: proc.stdout.toString(), stderr: proc.stderr.toString() };
-  } catch (e) {
-    return { code: 127, stdout: "", stderr: (e as Error).message };
-  }
 };
 
 export function runUpdate(o: UpdateOptions): number {
