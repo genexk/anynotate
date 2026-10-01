@@ -52,7 +52,9 @@ const compileWorks = (() => {
 })();
 const host = hostTarget(currentPlatform(), process.arch);
 
-describe.skipIf(!compileWorks || !host)("the compiled host binary", () => {
+// Not on Windows: Bun 1.3.11 there cannot unpack the downloaded bun-windows-x64-baseline runtime ("Failed to extract
+// executable"). Release binaries are cross-built on Linux, and the Windows smoke job runs that real artifact.
+describe.skipIf(!compileWorks || !host || process.platform === "win32")("the compiled host binary", () => {
   test(
     "carries its version and every runtime asset, with nothing to read from the checkout",
     () => {
