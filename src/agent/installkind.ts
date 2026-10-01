@@ -34,6 +34,7 @@ export function readInstallRecord(dataDir: string): InstallRecord | null {
   try {
     const r = JSON.parse(readFileSync(join(dataDir, INSTALL_RECORD), "utf8"));
     if ((r?.kind !== "binary" && r?.kind !== "source") || typeof r.path !== "string" || typeof r.version !== "string") return null;
+    if (!posix.isAbsolute(r.path) && !isWinPath(r.path)) return null;
     return r as InstallRecord;
   } catch {
     return null;

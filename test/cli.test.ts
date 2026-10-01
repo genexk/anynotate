@@ -131,8 +131,10 @@ test("install records the install kind and writes the service without starting i
 
 test("uninstall --dry-run lists the removals and changes nothing", async () => {
   await run(["install"]);
+  writeFileSync(join(home, "data", "token"), "secret\n");
   const r = await run(["uninstall", "--dry-run", "--purge"]);
   expect(r.code).toBe(0);
+  expect(r.out).toContain(`would delete ${join(home, "data")}`);
   expect(r.out).toContain(`would remove ${join(home, "data", "install.json")}`);
   expect(r.out.trimEnd().split("\n").at(-1)).toBe("Dry run: nothing was changed.");
   expect(existsSync(join(home, "data", "install.json"))).toBe(true);
@@ -146,6 +148,14 @@ test("uninstall removes what install wrote and keeps the data dir", async () => 
   expect(existsSync(join(home, "data"))).toBe(true);
   expect(r.out).not.toMatch(/^ran: /m);
   expect(r.out.trimEnd().split("\n").at(-1)).toBe(`Anynotate removed. Your notes are still in ${join(home, "data")} (use --purge to delete them).`);
+});
+
+test("a refused --purge exits non-zero and keeps the data dir", async () => {
+  await run(["install"]);
+  const r = await run(["uninstall", "--purge"]);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain(`refused to delete ${join(home, "data")}`);
+  expect(existsSync(join(home, "data"))).toBe(true);
 });
 
 test("uninstall rejects unknown flags", async () => {

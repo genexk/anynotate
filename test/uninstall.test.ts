@@ -243,7 +243,11 @@ test("the PATH entry is removed by PowerShell reading the directory from an envi
   const { argv, env } = calls[0]!;
   expect(argv.slice(0, 4)).toEqual(["powershell", "-NoProfile", "-NonInteractive", "-Command"]);
   expect(argv[4]).toContain("$env:ANYNOTATE_BIN_DIR");
-  expect(argv[4]).toContain("[Environment]::SetEnvironmentVariable('Path'");
+  expect(argv[4]).toContain("(Get-Item -LiteralPath 'HKCU:\\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')");
+  expect(argv[4]).toContain("Set-ItemProperty -LiteralPath 'HKCU:\\Environment' -Name Path -Value ($kept -join ';') -Type ExpandString");
+  expect(argv[4]).toContain("[Environment]::SetEnvironmentVariable('ANYNOTATE_TMP', $null, 'User')");
+  expect(argv[4]).not.toContain("[Environment]::SetEnvironmentVariable('Path'");
+  expect(argv[4]).not.toContain("GetEnvironmentVariable");
   expect(argv[4]).not.toContain("C:\\Users");
   expect(env).toEqual({ ANYNOTATE_BIN_DIR: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin" });
   expect(log).toEqual(["removed C:\\Users\\me\\AppData\\Local\\anynotate\\bin from the user PATH"]);
@@ -276,4 +280,66 @@ test("a .cmd shim the user changed is left alone", () => {
   const log = applyUninstall([{ action: "remove-shim", path: shim, content: "@expected\r\n" }], fakeExec, false);
   expect(existsSync(shim)).toBe(true);
   expect(log[0]).toContain("left alone");
+});
+
+test("a Windows binary outside the managed bin dir is renamed but the PATH is left alone", () => {
+  const exe = "C:\\Tools\\anynotate.exe";
+  const kind: InstallKind = { kind: "binary", exe };
+  const steps = winPlan({ kind, record: record(kind, "win32") });
+  expect(steps.some((s) => s.action === "rename-binary")).toBe(true);
+  expect(steps.some((s) => s.action === "remove-path-entry")).toBe(false);
+  const variant: InstallKind = { kind: "binary", exe: "c:\\users\\ME\\appdata\\local\\Anynotate\\BIN\\anynotate.exe" };
+  expect(winPlan({ kind: variant, record: record(variant, "win32") }).some((s) => s.action === "remove-path-entry")).toBe(true);
+});
+
+test("--purge refuses a filesystem root", () => {
+  const log = applyUninstall(plan({ env: { ANYNOTATE_HOME: "/" }, purge: true }), fakeExec, true);
+  expect(log.some((l) => l.startsWith("refused to delete /:") && l.includes("home"))).toBe(true);
+});
+
+test("--purge refuses an ancestor of home even when it holds a token", () => {
+  const user = join(home, "users", "me");
+  mkdirSync(user, { recursive: true });
+  writeFileSync(join(home, "users", "token"), "x");
+  const log = applyUninstall(plan({ home: user, env: { ANYNOTATE_HOME: join(home, "users") }, purge: true }), fakeExec, false);
+  expect(existsSync(join(home, "users", "token"))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${join(home, "users")}`))).toBe(true);
+});
+
+test("--purge refuses home reached through another path", () => {
+  const real = join(home, "real");
+  mkdirSync(real);
+  writeFileSync(join(real, "token"), "x");
+  const link = join(home, "link");
+  symlinkSync(real, link);
+  const log = applyUninstall(plan({ home: link, env: { ANYNOTATE_HOME: real }, purge: true }), fakeExec, false);
+  expect(existsSync(join(real, "token"))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${real}`))).toBe(true);
+});
+
+test("--purge refuses a custom data dir holding anything anynotate didn't write", () => {
+  const data = join(home, "elsewhere");
+  install({ env: { ANYNOTATE_HOME: data } });
+  writeFileSync(join(data, "token"), "secret\n");
+  writeFileSync(join(data, "thesis.docx"), "mine");
+  const log = applyUninstall(plan({ env: { ANYNOTATE_HOME: data }, purge: true }), fakeExec, false);
+  expect(existsSync(join(data, "thesis.docx"))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${data}`) && l.includes("thesis.docx"))).toBe(true);
+});
+
+test("--purge accepts a custom data dir with only anynotate's files, including temp and backup leftovers", () => {
+  const data = join(home, "elsewhere");
+  mkdirSync(join(data, "inbox"), { recursive: true });
+  for (const f of ["token", "settings.json", "bridge.log", "bridge.pid", "origins", "token.tmp-1-abc", "bridge.vbs.bak-anynotate"]) writeFileSync(join(data, f), "x");
+  applyUninstall(plan({ env: { ANYNOTATE_HOME: data }, purge: true }), fakeExec, false);
+  expect(existsSync(data)).toBe(false);
+});
+
+test("uninstall backs settings up under its own suffix, leaving install's backup alone", () => {
+  seedSettings();
+  install();
+  writeFileSync(join(home, ".claude/settings.json.bak-anynotate"), "install's backup");
+  applyUninstall(plan(), fakeExec, false);
+  expect(readFileSync(join(home, ".claude/settings.json.bak-anynotate"), "utf8")).toBe("install's backup");
+  expect(JSON.parse(readFileSync(join(home, ".claude/settings.json.bak-anynotate-uninstall"), "utf8")).hooks.UserPromptSubmit).toHaveLength(2);
 });

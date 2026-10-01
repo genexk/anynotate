@@ -61,3 +61,13 @@ test("a malformed install.json reads as no record", () => {
   writeFileSync(join(dir, "install.json"), JSON.stringify({ kind: "other", path: "/x" }));
   expect(readInstallRecord(dir)).toBeNull();
 });
+
+test("an install.json whose path is not absolute reads as no record", () => {
+  const base = { kind: "binary", version: "0.4.0", installedAt: "2026-10-01T12:00:00.000Z", platform: "linux" };
+  for (const path of ["anynotate", "./bin/anynotate", "", "..\\anynotate.exe"]) {
+    writeFileSync(join(dir, "install.json"), JSON.stringify({ ...base, path }));
+    expect(readInstallRecord(dir)).toBeNull();
+  }
+  writeFileSync(join(dir, "install.json"), JSON.stringify({ ...base, path: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe" }));
+  expect(readInstallRecord(dir)?.path).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe");
+});

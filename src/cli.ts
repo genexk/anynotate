@@ -141,7 +141,7 @@ switch (cmd) {
     });
     const log = applyUninstall(steps, exec, rest.includes("--dry-run"), { externalDryRun });
     for (const line of log) console.log(line);
-    process.exit(log.some((l) => l.startsWith("failed")) ? 1 : 0);
+    process.exit(log.some((l) => l.startsWith("failed") || l.startsWith("refused")) ? 1 : 0);
   }
   case "update": {
     const code = runUpdate({

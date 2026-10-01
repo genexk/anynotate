@@ -1,5 +1,5 @@
-import { copyFileSync, existsSync, lstatSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, parse, resolve, sep } from "node:path";
+import { type BigIntStats, copyFileSync, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import type { Exec, ExecResult } from "../platform/exec";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
 import { type Env, exeName, installPaths, pathFor, type Platform } from "../platform/os";
@@ -18,7 +18,8 @@ export type UninstallStep =
   | { action: "remove-binary"; path: string }
   | { action: "rename-binary"; path: string; to: string }
   | { action: "remove-path-entry"; path: string }
-  | { action: "purge"; path: string; home: string }
+  // custom: the data dir came from ANYNOTATE_HOME, so it must hold nothing but anynotate's own files.
+  | { action: "purge"; path: string; home: string; custom: boolean }
   | { action: "keep-data"; path: string };
 
 export type UninstallOptions = {
@@ -79,9 +80,11 @@ export function planUninstall(o: UninstallOptions): UninstallStep[] {
     ...wrapper,
     { action: "remove-file", path: path.join(dataDir, INSTALL_RECORD) },
     ...binarySteps(platform, installed, paths.binDir, paths.binPath),
-    o.purge ? { action: "purge", path: dataDir, home } : { action: "keep-data", path: dataDir },
+    o.purge ? { action: "purge", path: dataDir, home, custom: dataDir !== path.join(home, ".anynotate") } : { action: "keep-data", path: dataDir },
   ];
 }
+
+const sameWinDir = (a: string, b: string) => a.replace(/\\+$/, "").toLowerCase() === b.replace(/\\+$/, "").toLowerCase();
 
 // A running Windows program can't be deleted, so the binary is renamed aside (its dir stays) and the next install
 // or a manual delete clears it. A source install never touches the clone, only what links it onto PATH.
@@ -90,10 +93,9 @@ function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath
   if (k.kind === "binary") {
     if (path.basename(k.exe) !== exeName(platform)) return [];
     if (platform !== "win32") return [{ action: "remove-binary", path: k.exe }];
-    return [
-      { action: "rename-binary", path: k.exe, to: `${k.exe}.old` },
-      { action: "remove-path-entry", path: path.dirname(k.exe) },
-    ];
+    const rename: UninstallStep = { action: "rename-binary", path: k.exe, to: `${k.exe}.old` };
+    // Only the dir install.ps1 put on PATH; a binary placed elsewhere by hand shares its dir with other tools.
+    return sameWinDir(path.dirname(k.exe), binDir) ? [rename, { action: "remove-path-entry", path: path.dirname(k.exe) }] : [rename];
   }
   if (platform === "win32") {
     return [{ action: "remove-shim", path: path.join(binDir, "anynotate.cmd"), content: `@${cmdArgv(commandArgv(k))} %*\r\n` }];
@@ -101,15 +103,22 @@ function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath
   return [{ action: "remove-symlink", path: binPath, into: k.repo }];
 }
 
-// Reads the bin dir from the environment so no path is ever spliced into the script text. Comparison is
-// case-insensitive (PowerShell's -ne) and ignores a trailing backslash; the value is only written when it changes.
+// Reads the bin dir from the environment so no path is ever spliced into the script text. The raw registry value is
+// edited so %VAR% entries stay unexpanded and the value stays REG_EXPAND_SZ. An entry matches case-insensitively
+// (PowerShell's -ne), with or without a trailing backslash, as written or expanded; the value is only written when it
+// changes, and setting then clearing a throwaway variable broadcasts the change to Explorer.
 const REMOVE_PATH_ENTRY = [
+  "$ErrorActionPreference = 'Stop'",
   "$d = $env:ANYNOTATE_BIN_DIR.TrimEnd('\\')",
-  "$p = [Environment]::GetEnvironmentVariable('Path', 'User')",
+  "$p = (Get-Item -LiteralPath 'HKCU:\\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')",
   "if ($p) {",
   "  $parts = @($p -split ';' | Where-Object { $_ })",
-  "  $kept = @($parts | Where-Object { $_.TrimEnd('\\') -ne $d })",
-  "  if ($kept.Count -ne $parts.Count) { [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User') }",
+  "  $kept = @($parts | Where-Object { $_.TrimEnd('\\') -ne $d -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\\') -ne $d })",
+  "  if ($kept.Count -ne $parts.Count) {",
+  "    Set-ItemProperty -LiteralPath 'HKCU:\\Environment' -Name Path -Value ($kept -join ';') -Type ExpandString",
+  "    [Environment]::SetEnvironmentVariable('ANYNOTATE_TMP', 'x', 'User')",
+  "    [Environment]::SetEnvironmentVariable('ANYNOTATE_TMP', $null, 'User')",
+  "  }",
   "}",
 ].join("\n");
 
@@ -124,14 +133,53 @@ const lstatOrNull = (path: string) => {
 // Service removal is best effort: a unit or Run value that is already gone is the state we want.
 const tolerate = (argv: string[], r: ExecResult) => tolerateNotRunning(argv, r) || argv[0] === "systemctl";
 
-function purgeRefusal(dir: string, home: string): string | null {
+// Everything anynotate itself writes at the top of its data dir.
+export const DATA_DIR_ENTRIES: ReadonlySet<string> = new Set([
+  "token", "origins", "settings.json", INSTALL_RECORD, "bridge.log", "bridge.pid", "bridge.vbs",
+  "native-host", "native-host.cmd", "dev.anynotate.host.json", "inbox", "archive", "sessions",
+]);
+
+// Temp files a write left behind on a crash, backups install made of a file it replaced, and Finder metadata.
+const isOwnEntry = (name: string) =>
+  name === ".DS_Store" || DATA_DIR_ENTRIES.has(name.replace(/\.(tmp-.*|bak-anynotate.*)$/, ""));
+
+const sameFile = (a: BigIntStats, b: BigIntStats) => a.dev === b.dev && a.ino === b.ino;
+
+const statOrNull = (path: string) => {
+  try {
+    return statSync(path, { bigint: true });
+  } catch {
+    return null;
+  }
+};
+
+// Home, every dir above it, and the data dir's root, compared by identity so case variants, `..` and symlinked
+// aliases of them are caught too.
+function protectedDirs(dir: string, home: string): BigIntStats[] {
+  const out: BigIntStats[] = [];
+  for (let p = resolve(home); ; p = dirname(p)) {
+    const st = statOrNull(p);
+    if (st) out.push(st);
+    if (dirname(p) === p) break;
+  }
+  const root = statOrNull(parse(resolve(dir)).root);
+  if (root) out.push(root);
+  return out;
+}
+
+function purgeRefusal(dir: string, home: string, custom: boolean): string | null {
   if (!isAbsolute(dir)) return "it is not an absolute path";
   const stat = lstatOrNull(dir);
   if (!stat) return "it does not exist";
   if (stat.isSymbolicLink()) return "it is a symlink";
   if (!stat.isDirectory()) return "it is not a directory";
-  if (resolve(dir) === resolve(home) || parse(resolve(dir)).root === resolve(dir)) return "it is your home or a root directory";
-  if (!lstatOrNull(`${dir}${sep}token`)?.isFile()) return "it holds no token, so it does not look like an anynotate data dir";
+  const self = lstatSync(dir, { bigint: true });
+  if (protectedDirs(dir, home).some((p) => sameFile(p, self))) return "it is your home, a directory above it, or a root directory";
+  if (!lstatOrNull(join(dir, "token"))?.isFile()) return "it holds no token, so it does not look like an anynotate data dir";
+  if (custom) {
+    const foreign = readdirSync(dir).filter((n) => !isOwnEntry(n));
+    if (foreign.length > 0) return `it holds files anynotate did not write (${foreign.slice(0, 5).join(", ")}${foreign.length > 5 ? ", …" : ""})`;
+  }
   return null;
 }
 
@@ -142,7 +190,7 @@ export type UninstallApplyOptions = {
 };
 
 export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boolean, o: UninstallApplyOptions = {}): string[] {
-  const { externalDryRun = false, backupSuffix = ".bak-anynotate" } = o;
+  const { externalDryRun = false, backupSuffix = ".bak-anynotate-uninstall" } = o;
   const log: string[] = [];
   let failed = false;
   let dataLine = "";
@@ -239,7 +287,7 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
           break;
         }
         case "purge": {
-          const why = purgeRefusal(s.path, s.home);
+          const why = purgeRefusal(s.path, s.home, s.custom);
           if (why) {
             log.push(`refused to delete ${s.path}: ${why}`);
             dataLine = `Anynotate removed. ${s.path} was left in place (see above).`;
