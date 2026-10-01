@@ -68,6 +68,7 @@ test("linux with user systemd: a user unit and systemctl --user", () => {
   const c = plan.files[0]!.content;
   expect(c).toContain("[Unit]\nDescription=Anynotate bridge");
   expect(c).toContain(`[Service]\nExecStart=${BIN} bridge`);
+  expect(c).toContain("Environment=PATH=/home/me/.local/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin\n");
   expect(c).toContain("Restart=on-failure");
   expect(c).toContain("StandardOutput=append:/home/me/.anynotate/bridge.log");
   expect(c).toContain("StandardError=append:/home/me/.anynotate/bridge.log");
@@ -85,6 +86,13 @@ test("linux with user systemd: a user unit and systemctl --user", () => {
 test("linux: ExecStart quotes arguments with spaces and escapes specifiers", () => {
   const plan = planService({ ...base, platform: "linux", home: "/home/me", exe: ["/home/me/my bun/bun", '/src/a"b/100%/cli.ts'] });
   expect(plan.files[0]!.content).toContain('ExecStart="/home/me/my bun/bun" "/src/a\\"b/100%%/cli.ts" bridge\n');
+});
+
+test("linux: the unit's PATH starts with the executable's directory, quoted and escaped for systemd", () => {
+  const plan = planService({ ...base, platform: "linux", home: "/home/me", exe: ['/home/me/my "bun"/100%/bun', "/src/cli.ts"] });
+  expect(plan.files[0]!.content).toContain(
+    'Environment="PATH=/home/me/my \\"bun\\"/100%%:%h/.local/bin:/usr/local/bin:/usr/bin:/bin"\n',
+  );
 });
 
 test("linux: XDG_CONFIG_HOME is honoured only when absolute and non-blank", () => {

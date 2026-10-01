@@ -71,6 +71,13 @@ ${args}
   };
 }
 
+// systemd Environment= assignment: specifiers (%) still apply but $ does not; a value with whitespace, quotes or
+// backslashes is wrapped in double quotes with C-style escapes. %h in the fixed part is systemd's home specifier.
+function systemdPath(exeDir: string): string {
+  const assignment = `PATH=${exeDir.replace(/%/g, "%%")}:%h/.local/bin:/usr/local/bin:/usr/bin:/bin`;
+  return /[\s"'\\]/.test(assignment) ? `"${assignment.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : assignment;
+}
+
 function systemd(o: ServiceOptions): ServicePlan {
   const path = posix.join(xdgConfigHome(o.home, o.env), "systemd", "user", SYSTEMD_UNIT);
   const log = o.logPath.replace(/%/g, "%%");
@@ -79,6 +86,7 @@ Description=Anynotate bridge
 
 [Service]
 ExecStart=${[...o.exe, "bridge"].map(systemdArg).join(" ")}
+Environment=${systemdPath(posix.dirname(o.exe[0]!))}
 Restart=on-failure
 StandardOutput=append:${log}
 StandardError=append:${log}
