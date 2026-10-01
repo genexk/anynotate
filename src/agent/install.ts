@@ -1,6 +1,8 @@
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { addOrigin, ORIGIN_RE, readOrigins } from "../bridge/origins";
+import { planNativeHost, sourceHostWrapper } from "../platform/nativehost";
+import type { Platform } from "../platform/os";
 
 export type InstallStep = {
   path: string;
@@ -83,16 +85,6 @@ export function extensionOrigins(repo: string): string[] {
   }
 }
 
-export const NATIVE_HOST_NAME = "dev.anynotate.host";
-
-// Chrome starts native hosts with a minimal PATH, so the wrapper names bun by absolute path.
-export const nativeHostWrapper = (bunPath: string, repo: string) => `#!/bin/sh
-exec "${bunPath}" "${join(repo, "src/cli.ts")}" native-host "$@"
-`;
-
-export const nativeHostManifest = (wrapperPath: string, origins: string[]) =>
-  `${JSON.stringify({ name: NATIVE_HOST_NAME, description: "Anynotate bridge helper", path: wrapperPath, type: "stdio", allowed_origins: origins.map((o) => `${o}/`) }, null, 2)}\n`;
-
 export type InstallPlan = {
   home: string;
   anynotateBin: string;
@@ -100,9 +92,11 @@ export type InstallPlan = {
   bunPath?: string;
   which?: (cli: string) => string | null;
   installed?: (cli: string) => boolean;
+  platform?: Platform;
+  exists?: (path: string) => boolean;
 };
 
-export function planInstall({ home, anynotateBin, repo, bunPath = process.execPath, which = Bun.which, installed }: InstallPlan): InstallStep[] {
+export function planInstall({ home, anynotateBin, repo, bunPath = process.execPath, which = Bun.which, installed, platform = "darwin", exists = existsSync }: InstallPlan): InstallStep[] {
   const isInstalled = installed ?? ((cli: string) => which(cli) !== null || existsSync(join(home, `.${cli}`)));
   const hook = (agent: string, event: string) => JSON.stringify({ event, command: `anynotate hook --agent ${agent}` });
   const read = (rel: string) => (existsSync(join(repo, rel)) ? readFileSync(join(repo, rel), "utf8") : "");
@@ -121,7 +115,7 @@ export function planInstall({ home, anynotateBin, repo, bunPath = process.execPa
     { path: join(home, ".gemini/commands/annotations.toml"), action: "remove-file", content: read("assets/gemini/annotations.toml") },
     { path: join(home, ".anynotate"), action: "private-dir", content: "" },
     ...originSteps(home, repo),
-    ...nativeHostSteps(home, repo, bunPath),
+    ...nativeHostSteps(home, repo, bunPath, platform, exists),
     { path: join(home, `Library/LaunchAgents/${LAUNCHD_LABEL}.plist`), action: "write", content: launchdPlist(anynotateBin, home) },
   ];
 }
@@ -134,15 +128,18 @@ function originSteps(home: string, repo: string): InstallStep[] {
 }
 
 // Allows the pinned ids plus any added with `anynotate origin add`, so re-running install picks up a dev id.
-function nativeHostSteps(home: string, repo: string, bunPath: string): InstallStep[] {
-  const wrapper = join(home, ".anynotate/native-host");
-  const manifest = join(home, `Library/Application Support/Google/Chrome/NativeMessagingHosts/${NATIVE_HOST_NAME}.json`);
-  const origins = [...new Set([...extensionOrigins(repo), ...readOrigins(join(home, ".anynotate/origins"))])];
+// Registry steps have no InstallStep form yet, so a win32 plan reports them as skipped.
+function nativeHostSteps(home: string, repo: string, bunPath: string, platform: Platform, exists: (path: string) => boolean): InstallStep[] {
+  const dataDir = join(home, ".anynotate");
+  const wrapper = sourceHostWrapper(platform, bunPath, repo, dataDir);
+  const origins = [...new Set([...extensionOrigins(repo), ...readOrigins(join(dataDir, "origins"))])];
+  const host = planNativeHost({ platform, home, env: process.env, hostPath: wrapper.path, dataDir, origins, exists });
   return [
-    { path: wrapper, action: "write", content: nativeHostWrapper(bunPath, repo), mode: 0o700 },
-    origins.length > 0
-      ? { path: manifest, action: "write", content: nativeHostManifest(wrapper, origins) }
-      : { path: manifest, action: "skip", content: "no extension id to allow" },
+    { path: wrapper.path, action: "write", content: wrapper.content, mode: 0o700 },
+    ...host.map((s): InstallStep => {
+      if (s.kind !== "write-manifest") return { path: "key" in s ? s.key : s.path, action: "skip", content: "registry not written by this installer" };
+      return origins.length > 0 ? { path: s.path, action: "write", content: s.json } : { path: s.path, action: "skip", content: "no extension id to allow" };
+    }),
   ];
 }
 

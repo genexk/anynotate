@@ -285,7 +285,7 @@ test("without a readable extension-ids.json the origin step is skipped", () => {
 const BUN = "/opt/bun/bin/bun";
 const wrapperPath = () => join(home, ".anynotate/native-host");
 const manifestPath = () => join(home, "Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json");
-const hostPlan = () => planInstall({ home, anynotateBin: "/repo/bin/anynotate", repo: process.cwd(), installed: ALL, bunPath: BUN });
+const hostPlan = () => planInstall({ home, anynotateBin: "/repo/bin/anynotate", repo: process.cwd(), installed: ALL, bunPath: BUN, platform: "darwin" });
 
 test("install writes the native-host wrapper owner-only with the absolute bun path", () => {
   applyInstall(hostPlan(), false);
@@ -303,7 +303,7 @@ test("the host manifest names the wrapper and allows pinned plus added extension
   expect(raw).toContain('\n  "name": "dev.anynotate.host"');
   expect(JSON.parse(raw)).toEqual({
     name: "dev.anynotate.host",
-    description: "Anynotate bridge helper",
+    description: "Anynotate helper",
     path: wrapperPath(),
     type: "stdio",
     allowed_origins: [`${EXT_ORIGIN}/`, `${dev}/`],
@@ -344,4 +344,14 @@ test("without any extension id the host manifest is skipped", () => {
   const log = applyInstall(planInstall({ home, anynotateBin: "/b", repo: "/nonexistent-repo", installed: ALL, bunPath: BUN }), false);
   expect(log).toContain(`skip    ${manifestPath()} (no extension id to allow)`);
   expect(existsSync(manifestPath())).toBe(false);
+});
+
+test("the host manifest is also written for Brave when its profile exists, never for absent browsers", () => {
+  const brave = join(home, "Library/Application Support/BraveSoftware/Brave-Browser");
+  mkdirSync(brave, { recursive: true });
+  applyInstall(hostPlan(), false);
+  expect(JSON.parse(readFileSync(join(brave, "NativeMessagingHosts/dev.anynotate.host.json"), "utf8")).path).toBe(wrapperPath());
+  expect(existsSync(manifestPath())).toBe(true);
+  expect(existsSync(join(home, "Library/Application Support/Microsoft Edge"))).toBe(false);
+  expect(existsSync(join(home, "Library/Application Support/Chromium"))).toBe(false);
 });
