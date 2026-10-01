@@ -1,10 +1,11 @@
-import { type BigIntStats, copyFileSync, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { type BigIntStats, copyFileSync, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import type { Exec, ExecResult } from "../platform/exec";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
 import { type Env, exeName, installPaths, pathFor, type Platform } from "../platform/os";
 import { planService, runSteps, tolerateNotRunning } from "../platform/service";
 import { REMOVE_PATH_ENTRY, runPathEntry } from "../platform/userpath";
+import { EMBEDDED_ASSETS } from "./assets";
 import { HOOKED_CLIS, isAnynotateHook, removeHook } from "./install";
 import { commandArgv, INSTALL_RECORD, type InstallKind, type InstallRecord } from "./installkind";
 
@@ -12,7 +13,8 @@ export type UninstallStep =
   | { action: "run"; path: string; argv: string[][] }
   | { action: "remove-file"; path: string }
   | { action: "remove-hook"; path: string; agent: string }
-  | { action: "remove-dir"; path: string }
+  // The skill file is removed only while it still holds what install wrote, and its dir only once empty.
+  | { action: "remove-skill"; path: string; content: string }
   | { action: "native-host"; path: string; host: HostStep }
   | { action: "remove-symlink"; path: string; into: string }
   | { action: "remove-shim"; path: string; content: string }
@@ -65,7 +67,7 @@ export function planUninstall(o: UninstallOptions): UninstallStep[] {
 
   const hooks = HOOKED_CLIS.flatMap(({ cli, settings, skill }): UninstallStep[] => [
     { action: "remove-hook", path: path.join(home, ...settings.split("/")), agent: cli },
-    { action: "remove-dir", path: path.dirname(path.join(home, ...skill.split("/"))) },
+    { action: "remove-skill", path: path.join(home, ...skill.split("/")), content: EMBEDDED_ASSETS["assets/skill/SKILL.md"] ?? "" },
   ]);
 
   const host = planNativeHostRemoval({ platform, home, env, hostPath: "", dataDir, exists: existsSync }).map(
@@ -200,11 +202,22 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
           log.push(`removed ${s.path}`);
           break;
         }
-        case "remove-dir": {
-          if (!lstatOrNull(s.path)) break;
-          if (dryRun) { log.push(`would remove ${s.path}`); break; }
-          rmSync(s.path, { recursive: true, force: true });
-          log.push(`removed ${s.path}`);
+        case "remove-skill": {
+          const dir = dirname(s.path);
+          const file = lstatOrNull(s.path);
+          let gone = !file;
+          if (file) {
+            if (!file.isFile() || readFileSync(s.path, "utf8") !== s.content) { log.push(`kept ${s.path} (modified)`); break; }
+            if (dryRun) log.push(`would remove ${s.path}`);
+            else { rmSync(s.path); log.push(`removed ${s.path}`); }
+            gone = true;
+          }
+          if (!gone || !lstatOrNull(dir)?.isDirectory()) break;
+          const left = readdirSync(dir).filter((n) => n !== basename(s.path));
+          if (left.length) { log.push(`kept ${dir} (not empty)`); break; }
+          if (dryRun) { log.push(`would remove ${dir}`); break; }
+          rmdirSync(dir);
+          log.push(`removed ${dir}`);
           break;
         }
         case "remove-hook": {

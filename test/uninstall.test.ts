@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { posix, win32 } from "node:path";
+import { EMBEDDED_ASSETS } from "../src/agent/assets";
 import { applyInstall, type InstallOptions, planInstall } from "../src/agent/install";
 import type { InstallKind, InstallRecord } from "../src/agent/installkind";
 import { applyUninstall, planUninstall, type UninstallOptions, type UninstallStep } from "../src/agent/uninstall";
@@ -92,6 +93,53 @@ posixOnly("uninstall reverses a source install on macOS and keeps the data dir",
   expect(argvs()).toEqual([["launchctl", "bootout", "gui/501/dev.anynotate.bridge"]]);
   expect(log.at(-1)).toBe(`Anynotate removed. Your notes are still in ${data} (use --purge to delete them).`);
   expect(REPO && existsSync(join(REPO, "bin/anynotate"))).toBe(true);
+});
+
+const skillSteps = () => plan().filter((s): s is Extract<UninstallStep, { action: "remove-skill" }> => s.action === "remove-skill");
+
+test("skills are removed only while unchanged, and their dirs only once empty", () => {
+  const [claude, codex] = skillSteps();
+  expect(claude!.path).toBe(join(home, ".claude/skills/annotations/SKILL.md"));
+  expect(codex!.path).toBe(join(home, ".codex/skills/annotations/SKILL.md"));
+  expect(claude!.content).toBe(EMBEDDED_ASSETS["assets/skill/SKILL.md"]!);
+  expect(claude!.content.length).toBeGreaterThan(0);
+  const claudeDir = join(home, ".claude/skills/annotations");
+  const codexDir = join(home, ".codex/skills/annotations");
+  mkdirSync(claudeDir, { recursive: true });
+  mkdirSync(codexDir, { recursive: true });
+  writeFileSync(claude!.path, claude!.content);
+  writeFileSync(join(claudeDir, "notes.md"), "mine\n");
+  writeFileSync(codex!.path, `${codex!.content}\nmy edit\n`);
+
+  const dry = applyUninstall([claude!, codex!], fakeExec, true);
+  expect(dry).toContain(`would remove ${claude!.path}`);
+  expect(dry).toContain(`kept ${claudeDir} (not empty)`);
+  expect(dry).toContain(`kept ${codex!.path} (modified)`);
+  expect(existsSync(claude!.path)).toBe(true);
+
+  const log = applyUninstall([claude!, codex!], fakeExec, false);
+  expect(log).toContain(`removed ${claude!.path}`);
+  expect(log).toContain(`kept ${claudeDir} (not empty)`);
+  expect(log).toContain(`kept ${codex!.path} (modified)`);
+  expect(existsSync(claude!.path)).toBe(false);
+  expect(readFileSync(join(claudeDir, "notes.md"), "utf8")).toBe("mine\n");
+  expect(readFileSync(codex!.path, "utf8")).toBe(`${codex!.content}\nmy edit\n`);
+
+  rmSync(join(claudeDir, "notes.md"));
+  writeFileSync(codex!.path, codex!.content);
+  expect(applyUninstall([claude!, codex!], fakeExec, true)).toEqual([`would remove ${claudeDir}`, `would remove ${codex!.path}`, `would remove ${codexDir}`, "Dry run: nothing was changed."]);
+  expect(applyUninstall([claude!, codex!], fakeExec, false)).toEqual([`removed ${claudeDir}`, `removed ${codex!.path}`, `removed ${codexDir}`]);
+  expect(existsSync(claudeDir)).toBe(false);
+  expect(existsSync(codexDir)).toBe(false);
+  expect(existsSync(join(home, ".codex/skills"))).toBe(true);
+  expect(applyUninstall([claude!, codex!], fakeExec, false)).toEqual([]);
+});
+
+test("a skill path that is a directory is kept as modified", () => {
+  const [claude] = skillSteps();
+  mkdirSync(join(claude!.path, "inner"), { recursive: true });
+  expect(applyUninstall([claude!], fakeExec, false)).toEqual([`kept ${claude!.path} (modified)`]);
+  expect(existsSync(join(claude!.path, "inner"))).toBe(true);
 });
 
 test("uninstall removes the legacy bare hook and old absolute paths, nothing else", () => {

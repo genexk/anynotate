@@ -43,7 +43,7 @@ anynotate uninstall --dry-run
 anynotate uninstall            # add --purge to delete ~/.anynotate (your notes) as well
 ```
 
-`doctor` exits non-zero only when a required check fails. `update` downloads the newest release for your platform from GitHub, verifies it against `SHA256SUMS`, replaces the binary and re-runs `install`; on Windows the running binary is moved aside to `anynotate.exe.old`. `uninstall` stops the bridge and removes the service, the Chrome helper registrations, the hooks and skills, and the binary (on Windows it also takes the bin directory off the user `PATH`). It keeps `~/.anynotate` unless you pass `--purge`.
+`doctor` exits non-zero only when a required check fails. `update` downloads the newest release for your platform from GitHub, verifies it against `SHA256SUMS`, replaces the binary and re-runs `install`; on Windows the running binary is moved aside to `anynotate.exe.old`. `uninstall` stops the bridge and removes the service, the Chrome helper registrations, the hooks and skills (a `SKILL.md` you edited is kept), and the binary (on Windows it also takes the bin directory off the user `PATH`). It keeps `~/.anynotate` unless you pass `--purge`.
 
 ### Install from source (development)
 
