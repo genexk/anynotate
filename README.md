@@ -57,7 +57,7 @@ bin/anynotate install --dry-run   # show what would be written
 bin/anynotate install
 ```
 
-A source install sets up the same service, hooks and Chrome helper, but links `~/.local/bin/anynotate` to the clone (an `anynotate.cmd` shim on Windows) and starts the helper through a `~/.anynotate/native-host` wrapper (`native-host.cmd` on Windows) that runs the CLI under Bun. Here `anynotate update` pulls the clone (`git pull --ff-only`), runs `bun install` and re-runs `install`; it needs a clean clone on `main` and otherwise refuses and changes nothing. Release binaries are built with `bun run build:binaries` (into `dist/bin`, with `SHA256SUMS`).
+A source install sets up the same service, hooks and Chrome helper, but links `~/.local/bin/anynotate` to the clone (on Windows an `anynotate.cmd` shim in `%LOCALAPPDATA%\anynotate\bin`, which `install` adds to the user `PATH` and `uninstall` removes; open a new terminal afterwards) and starts the helper through a `~/.anynotate/native-host` wrapper (`native-host.cmd` on Windows) that runs the CLI under Bun. Here `anynotate update` pulls the clone (`git pull --ff-only`), runs `bun install` and re-runs `install`; it needs a clean clone on `main` and otherwise refuses and changes nothing. Release binaries are built with `bun run build:binaries` (into `dist/bin`, with `SHA256SUMS`).
 
 ## Usage
 

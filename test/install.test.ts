@@ -478,6 +478,37 @@ test("a Windows source install puts an anynotate.cmd shim on its bin dir and a .
   expect(shim.path).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.cmd");
   expect(shim.content).toBe('@"C:\\bun\\bun.exe" "C:\\src\\anynotate\\src\\cli.ts" %*\r\n');
   expect(steps.find((s) => s.path.endsWith("native-host.cmd"))!.mode).toBeUndefined();
+  const entry = steps.filter((s) => s.action === "path-entry");
+  expect(entry).toEqual([{ path: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin", action: "path-entry", content: "" }]);
+  expect(steps.indexOf(entry[0]!)).toBe(steps.indexOf(shim) + 1);
+});
+
+test("only a Windows source install adds a PATH entry", () => {
+  expect(planFor().some((s) => s.action === "path-entry")).toBe(false);
+  expect(planFor({ platform: "win32", home: "C:\\Users\\me", env: {}, kind: { kind: "binary", exe: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe" } }).some((s) => s.action === "path-entry")).toBe(false);
+});
+
+test("the PATH entry is added by PowerShell reading the dir from the environment, keeping %VAR% entries unexpanded", () => {
+  const step: InstallStep = { path: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin", action: "path-entry", content: "" };
+  const seen: { argv: string[]; env?: Record<string, string> }[] = [];
+  const exec = (stdout: string, code = 0): Exec => (argv, _cwd, env) => {
+    seen.push({ argv, env });
+    return { code, stdout, stderr: code ? "denied" : "" };
+  };
+  expect(applyInstall([step], false, { exec: exec("added\r\n"), platform: "win32" })).toEqual([`added   ${step.path} to the user PATH (open a new terminal to use anynotate)`]);
+  const { argv, env } = seen[0]!;
+  expect(argv.slice(0, 4)).toEqual(["powershell", "-NoProfile", "-NonInteractive", "-Command"]);
+  expect(argv[4]).toContain("GetValue('Path', '', 'DoNotExpandEnvironmentNames')");
+  expect(argv[4]).toContain("-Type ExpandString");
+  expect(argv[4]).not.toContain("C:\\Users");
+  expect(argv[4]).not.toContain("[Environment]::SetEnvironmentVariable('Path'");
+  expect(env).toEqual({ ANYNOTATE_BIN_DIR: step.path });
+  expect(applyInstall([step], false, { exec: exec("present"), platform: "win32" })).toEqual([`ok      ${step.path} (on the user PATH)`]);
+  expect(applyInstall([step], false, { exec: exec("", 1), platform: "win32" })).toEqual([`failed (exit 1): adding ${step.path} to the user PATH: denied`]);
+  seen.length = 0;
+  expect(applyInstall([step], true, { exec: exec("added"), platform: "win32" })).toEqual([`would add ${step.path} to the user PATH`]);
+  expect(applyInstall([step], false, { exec: exec("added"), platform: "win32", externalDryRun: true })).toEqual([`would add ${step.path} to the user PATH`]);
+  expect(seen).toEqual([]);
 });
 
 test("the data dir follows ANYNOTATE_HOME", () => {

@@ -6,12 +6,25 @@ import { makePrivateDir, writePrivateFile } from "../platform/files";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHost, sourceHostWrapper } from "../platform/nativehost";
 import { currentPlatform, type Env, installPaths, pathFor, type Platform } from "../platform/os";
 import { LAUNCHD_LABEL, planService, runSteps, type ServiceFile } from "../platform/service";
+import { ADD_PATH_ENTRY, runPathEntry } from "../platform/userpath";
 import { EMBEDDED_ASSETS } from "./assets";
 import { commandArgv, formatInstallRecord, INSTALL_RECORD, type InstallKind, type InstallRecord, quoteArgv } from "./installkind";
 
 export type InstallStep = {
   path: string;
-  action: "write" | "merge-json" | "symlink" | "private-dir" | "skip" | "remove-hook" | "remove-file" | "origin" | "native-host" | "record" | "run";
+  action:
+    | "write"
+    | "merge-json"
+    | "symlink"
+    | "private-dir"
+    | "skip"
+    | "remove-hook"
+    | "remove-file"
+    | "origin"
+    | "native-host"
+    | "record"
+    | "run"
+    | "path-entry";
   content: string;
   mode?: number;
   encoding?: ServiceFile["encoding"];
@@ -197,11 +210,15 @@ export function planInstall(o: InstallOptions): InstallStep[] {
   ];
 }
 
-// A binary install was put in place by the install script; a source install links the clone's launcher onto PATH.
+// A binary install was put in place by the install script; a source install links the clone's launcher onto PATH,
+// on Windows through a .cmd shim whose dir install adds to the user PATH the way install.ps1 does.
 function binSteps(platform: Platform, kind: InstallKind, binDir: string, binPath: string): InstallStep[] {
   if (kind.kind === "binary") return [];
   if (platform === "win32") {
-    return [{ path: win32.join(binDir, "anynotate.cmd"), action: "write", content: `@${cmdArgv(commandArgv(kind))} %*\r\n` }];
+    return [
+      { path: win32.join(binDir, "anynotate.cmd"), action: "write", content: `@${cmdArgv(commandArgv(kind))} %*\r\n` },
+      { path: binDir, action: "path-entry", content: "" },
+    ];
   }
   return [{ path: binPath, action: "symlink", content: posix.join(kind.repo, "bin", "anynotate") }];
 }
@@ -331,6 +348,12 @@ export function applyInstall(steps: InstallStep[], dryRun: boolean, o: ApplyOpti
       if (dryRun) { log.push(`would write ${s.path}`); continue; }
       writePrivateFile(s.path, s.content, platform, exec);
       log.push(`wrote   ${s.path}`);
+    } else if (s.action === "path-entry") {
+      if (dryRun || externalDryRun) { log.push(`would add ${s.path} to the user PATH`); continue; }
+      const r = runPathEntry(exec, ADD_PATH_ENTRY, s.path);
+      if (r.code !== 0) log.push(`failed (exit ${r.code}): adding ${s.path} to the user PATH${r.stderr.trim() ? `: ${r.stderr.trim()}` : ""}`);
+      else if (r.stdout.trim() === "present") log.push(`ok      ${s.path} (on the user PATH)`);
+      else log.push(`added   ${s.path} to the user PATH (open a new terminal to use anynotate)`);
     } else if (s.action === "run") {
       log.push(...runSteps(s.argv ?? [], exec, dryRun || externalDryRun).log);
     } else if (s.action === "write") {

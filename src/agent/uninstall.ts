@@ -4,6 +4,7 @@ import type { Exec, ExecResult } from "../platform/exec";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
 import { type Env, exeName, installPaths, pathFor, type Platform } from "../platform/os";
 import { planService, runSteps, tolerateNotRunning } from "../platform/service";
+import { REMOVE_PATH_ENTRY, runPathEntry } from "../platform/userpath";
 import { HOOKED_CLIS, isAnynotateHook, removeHook } from "./install";
 import { commandArgv, INSTALL_RECORD, type InstallKind, type InstallRecord } from "./installkind";
 
@@ -87,7 +88,8 @@ export function planUninstall(o: UninstallOptions): UninstallStep[] {
 const sameWinDir = (a: string, b: string) => a.replace(/\\+$/, "").toLowerCase() === b.replace(/\\+$/, "").toLowerCase();
 
 // A running Windows program can't be deleted, so the binary is renamed aside (its dir stays) and the next install
-// or a manual delete clears it. A source install never touches the clone, only what links it onto PATH.
+// or a manual delete clears it. A source install never touches the clone, only what links it onto PATH: the
+// symlink, or on Windows the .cmd shim and the bin dir install added to the user PATH.
 function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath: string): UninstallStep[] {
   const path = pathFor(platform);
   if (k.kind === "binary") {
@@ -98,29 +100,13 @@ function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath
     return sameWinDir(path.dirname(k.exe), binDir) ? [rename, { action: "remove-path-entry", path: path.dirname(k.exe) }] : [rename];
   }
   if (platform === "win32") {
-    return [{ action: "remove-shim", path: path.join(binDir, "anynotate.cmd"), content: `@${cmdArgv(commandArgv(k))} %*\r\n` }];
+    return [
+      { action: "remove-shim", path: path.join(binDir, "anynotate.cmd"), content: `@${cmdArgv(commandArgv(k))} %*\r\n` },
+      { action: "remove-path-entry", path: binDir },
+    ];
   }
   return [{ action: "remove-symlink", path: binPath, into: k.repo }];
 }
-
-// Reads the bin dir from the environment so no path is ever spliced into the script text. The raw registry value is
-// edited so %VAR% entries stay unexpanded and the value stays REG_EXPAND_SZ. An entry matches case-insensitively
-// (PowerShell's -ne), with or without a trailing backslash, as written or expanded; the value is only written when it
-// changes, and setting then clearing a throwaway variable broadcasts the change to Explorer.
-const REMOVE_PATH_ENTRY = [
-  "$ErrorActionPreference = 'Stop'",
-  "$d = $env:ANYNOTATE_BIN_DIR.TrimEnd('\\')",
-  "$p = (Get-Item -LiteralPath 'HKCU:\\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')",
-  "if ($p) {",
-  "  $parts = @($p -split ';' | Where-Object { $_ })",
-  "  $kept = @($parts | Where-Object { $_.TrimEnd('\\') -ne $d -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\\') -ne $d })",
-  "  if ($kept.Count -ne $parts.Count) {",
-  "    Set-ItemProperty -LiteralPath 'HKCU:\\Environment' -Name Path -Value ($kept -join ';') -Type ExpandString",
-  "    [Environment]::SetEnvironmentVariable('ANYNOTATE_TMP', 'x', 'User')",
-  "    [Environment]::SetEnvironmentVariable('ANYNOTATE_TMP', $null, 'User')",
-  "  }",
-  "}",
-].join("\n");
 
 const lstatOrNull = (path: string) => {
   try {
@@ -281,7 +267,7 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
         }
         case "remove-path-entry": {
           if (dryRun || externalDryRun) { log.push(`would remove ${s.path} from the user PATH`); break; }
-          const r = exec(["powershell", "-NoProfile", "-NonInteractive", "-Command", REMOVE_PATH_ENTRY], undefined, { ANYNOTATE_BIN_DIR: s.path });
+          const r = runPathEntry(exec, REMOVE_PATH_ENTRY, s.path);
           if (r.code === 0) log.push(`removed ${s.path} from the user PATH`);
           else fail(`failed (exit ${r.code}): removing ${s.path} from the user PATH${r.stderr.trim() ? `: ${r.stderr.trim()}` : ""}`);
           break;

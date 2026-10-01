@@ -272,10 +272,12 @@ test("a running Windows binary is renamed to .old, replacing an earlier .old", (
   expect(applyUninstall([{ action: "rename-binary", path: exe, to: `${exe}.old` }], fakeExec, false)).toEqual([]);
 });
 
-test("a Windows source install removes its .cmd shim and host wrapper, never the clone, and touches no PATH", () => {
+test("a Windows source install removes its .cmd shim, the bin dir's PATH entry and host wrapper, never the clone", () => {
   const kind: InstallKind = { kind: "source", repo: "C:\\src\\anynotate", bun: "C:\\bun\\bun.exe" };
   const steps = winPlan({ kind, record: record(kind, "win32") });
-  expect(steps.some((s) => s.action === "rename-binary" || s.action === "remove-path-entry")).toBe(false);
+  expect(steps.some((s) => s.action === "rename-binary")).toBe(false);
+  expect(steps.filter((s) => s.action === "remove-path-entry")).toEqual([{ action: "remove-path-entry", path: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin" }]);
+  expect(steps.findIndex((s) => s.action === "remove-path-entry")).toBeGreaterThan(steps.findIndex((s) => s.action === "remove-shim"));
   const files = steps.filter((s) => s.action === "remove-file" || s.action === "remove-shim").map((s) => s.path);
   expect(files).toContain("C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.cmd");
   expect(files).toContain("C:\\Users\\me\\.anynotate\\native-host.cmd");
