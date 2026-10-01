@@ -70,6 +70,8 @@ jobs:
         with:
           name: binaries
           path: dist/bin
+      - name: Give the installer agents to hook
+        run: mkdir -p "$HOME/.claude" "$HOME/.codex"
       - name: Install with install.sh
         if: runner.os != 'Windows'
         run: ANYNOTATE_BASE_URL="file://$PWD/dist/bin" sh scripts/install.sh

@@ -1,8 +1,10 @@
 // Post-install smoke test for a release binary, run after install.sh / install.ps1 on each OS.
 // usage: bun scripts/smoke.ts
 //
-// Checks the bridge answers /health, the Chrome native host is registered and answers a token request, `doctor`
-// passes, and `uninstall` removes the service, native-host registrations and hooks again.
+// Checks the bridge answers /health, the Chrome native host is registered and answers a token request, the Claude
+// Code and Codex hooks are written with the absolute binary path and run cleanly through the shells agents use,
+// `doctor` passes, and `uninstall` removes the service, native-host registrations and hooks again.
+// ~/.claude and ~/.codex must exist before the install so that it hooks both.
 //
 // Environment:
 //   SMOKE_LOCAL=1  the install ran with ANYNOTATE_EXTERNAL_DRYRUN=1 into a temporary HOME, so no service manager or
@@ -12,7 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { PROTOCOL_VERSION } from "@anynotate/protocol";
 import pkg from "../package.json";
-import { HOOKED_CLIS, isAnynotateHook } from "../src/agent/install";
+import { HOOKED_CLIS, hookCommand, isAnynotateHook } from "../src/agent/install";
 import { decodeMessage, encodeMessage } from "../src/agent/native-host";
 import { bridgePort, readHealth } from "../src/bridge/control";
 import { tokenPath } from "../src/inbox/paths";
@@ -136,6 +138,30 @@ function anynotateHooks(): string[] {
   });
 }
 
+// Runs a hook command line the way an agent would: through sh, or on Windows through both cmd and Git Bash.
+function hookShells(): { name: string; argv: string[]; verbatim?: boolean }[] {
+  if (platform !== "win32") return [{ name: "sh", argv: ["sh", "-c"] }];
+  const gitBash = ["C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"].find((b) => existsSync(b));
+  check(gitBash, "Git Bash was not found under C:\\Program Files\\Git");
+  return [
+    { name: "cmd", argv: ["cmd.exe", "/d", "/s", "/c"], verbatim: true },
+    { name: "Git Bash", argv: [gitBash!, "-c"] },
+  ];
+}
+
+function runHookCommand(command: string) {
+  for (const shell of hookShells()) {
+    const argv = [...shell.argv, shell.verbatim ? `"${command}"` : command];
+    console.log(`$ ${argv.join(" ")} <<< {}`);
+    const proc = Bun.spawnSync(argv, { stdin: Buffer.from("{}"), stdout: "pipe", stderr: "pipe", windowsVerbatimArguments: shell.verbatim });
+    const out = proc.stdout.toString();
+    const err = proc.stderr.toString();
+    if (err.trim()) console.log(err.trimEnd());
+    check(proc.exitCode === 0, `${shell.name}: hook exited ${proc.exitCode}`);
+    check(out.trim() === "", `${shell.name}: hook delivered output with an empty inbox: ${out.trim()}`);
+  }
+}
+
 async function main() {
   console.log(`smoke: ${platform}/${process.arch}, ${local ? "local (external commands dry-run)" : "real install"}, home ${home}, port ${port}`);
   const hasUserSystemd = platform === "linux" && !local && detectUserSystemd(spawnExec);
@@ -188,6 +214,18 @@ async function main() {
     check(reply.token === token, "native host returned a token that differs from the token file");
   });
 
+  await step("Claude Code and Codex hooks call the installed binary and run cleanly", () => {
+    for (const { cli, settings } of HOOKED_CLIS) {
+      const file = path.join(home, ...settings.split("/"));
+      check(existsSync(file), `${file} was not written (create ~/.${cli} before installing)`);
+      const expected = hookCommand({ kind: "binary", exe: bin }, cli, platform);
+      check(path.isAbsolute(bin), `binary path ${bin} is not absolute`);
+      const found = anynotateHooks().some((h) => h === `${file}: ${expected}`);
+      check(found, `${file} has no hook "${expected}"`);
+      runHookCommand(expected);
+    }
+  });
+
   await step("anynotate doctor passes", () => {
     hooks = anynotateHooks();
     check(run([bin, "doctor"]).code === 0, "doctor reported a failed check");
@@ -205,7 +243,8 @@ async function main() {
       check(reg([RUN_KEY, "/v", WINDOWS_TASK]) === 1, `Run value "${WINDOWS_TASK}" is still there`);
       for (const b of BROWSERS) check(reg([browserRegistryKey(b)]) === 1, `${browserRegistryKey(b)} is still there`);
     }
-    if (hooks.length) console.log(`hooks before uninstall:\n  ${hooks.join("\n  ")}`);
+    check(hooks.length === HOOKED_CLIS.length, `expected ${HOOKED_CLIS.length} hooks before uninstall, found ${hooks.length}`);
+    console.log(`hooks before uninstall:\n  ${hooks.join("\n  ")}`);
     const left = anynotateHooks();
     check(left.length === 0, `hooks still present:\n  ${left.join("\n  ")}`);
     check(!existsSync(bin), `${bin} is still there`);
