@@ -66,8 +66,9 @@ test("one unreadable bundle doesn't lose the others", () => {
   const first = writeBundle(sampleInput, {}, new Date(2026, 0, 1));
   const second = writeBundle(sampleInput, {}, new Date(2026, 5, 1));
   rmSync(join(home, "inbox", second.id, "README.md"));
-  const out = runHook("claude", stdin({ session_id: "s-1", cwd: "/tmp/repo" }));
-  expect(out).toContain(join(home, "inbox", first.id));
+  const out = JSON.parse(runHook("claude", stdin({ session_id: "s-1", cwd: "/tmp/repo" })));
+  expect(out.hookSpecificOutput.additionalContext).toContain(join(home, "inbox", first.id));
+  expect(out.hookSpecificOutput.additionalContext).not.toContain(second.id);
   expect(readStatus(first.id)).toMatchObject({ state: "delivered", via: "hook" });
   expect(readStatus(second.id)!.state).toBe("queued");
 });
