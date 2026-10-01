@@ -104,3 +104,11 @@ test("an install.json whose path is not absolute reads as no record", () => {
   writeFileSync(join(dir, "install.json"), JSON.stringify({ ...base, path: "C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe" }));
   expect(readInstallRecord(dir)?.path).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe");
 });
+
+test("quoteArgv on win32 quotes paths with an apostrophe, parentheses or separators, and the hook still matches", () => {
+  for (const exe of ["C:/Users/O'Brien/AppData/Local/anynotate/bin/anynotate.exe", "C:/Users/a(1)/AppData/Local/anynotate/bin/anynotate.exe", "C:/Users/a;b/AppData/Local/anynotate/bin/anynotate.exe"]) {
+    const quoted = quoteArgv([exe], "win32");
+    expect(quoted).toBe(`"${exe}"`);
+    expect(isAnynotateHook(`${quoted} hook --agent claude`, "claude")).toBe(true);
+  }
+});

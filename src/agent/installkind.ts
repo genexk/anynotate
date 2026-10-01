@@ -25,7 +25,7 @@ export const commandArgv = (k: InstallKind): string[] =>
 // nothing expands); on Windows, where cmd and Git Bash both run it, a path with spaces or cmd metacharacters is
 // double-quoted, since Windows paths can't hold a double quote.
 const POSIX_PLAIN = /^[A-Za-z0-9_./:@%+=,-]+$/;
-const WIN32_QUOTE = /[\s&|<>^%!]/;
+const WIN32_QUOTE = /[\s&|<>^%!'();,=]/;
 export const quoteArgv = (argv: string[], platform: Platform) =>
   argv
     .map((a) =>
