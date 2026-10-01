@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from "node:os";
 const ALL = () => true;
 import { join } from "node:path";
-import { addHook, applyInstall, extensionOrigins, type InstallOptions, type InstallStep, planInstall } from "../src/agent/install";
+import { addHook, applyInstall, extensionOrigins, isAnynotateHook, type InstallOptions, type InstallStep, planInstall } from "../src/agent/install";
 import type { InstallKind } from "../src/agent/installkind";
 import type { Exec } from "../src/platform/exec";
 
@@ -430,8 +430,10 @@ test("hooks name the absolute executable on every OS, quoted only when the path 
   expect(hookOf(darwin, "codex")).toBe("/Users/me/.bun/bin/bun /Users/me/src/anynotate/src/cli.ts hook --agent codex");
   const winExe = (home: string) => `${home}\\AppData\\Local\\anynotate\\bin\\anynotate.exe`;
   const win = (home: string) => planFor({ platform: "win32", home, kind: { kind: "binary", exe: winExe(home) } });
-  expect(hookOf(win("C:\\Users\\me"), "claude")).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe hook --agent claude");
-  expect(hookOf(win("C:\\Users\\Me Me"), "claude")).toBe('"C:\\Users\\Me Me\\AppData\\Local\\anynotate\\bin\\anynotate.exe" hook --agent claude');
+  expect(hookOf(win("C:\\Users\\me"), "claude")).toBe("C:/Users/me/AppData/Local/anynotate/bin/anynotate.exe hook --agent claude");
+  expect(hookOf(win("C:\\Users\\Me Me"), "claude")).toBe('"C:/Users/Me Me/AppData/Local/anynotate/bin/anynotate.exe" hook --agent claude');
+  const winSrc = planFor({ platform: "win32", home: "C:\\Users\\me", kind: { kind: "source", repo: "C:\\src\\anynotate", bun: "C:\\bun\\bun.exe" } });
+  expect(hookOf(winSrc, "codex")).toBe("C:/bun/bun.exe C:/src/anynotate/src/cli.ts hook --agent codex");
   expect(win("C:\\Users\\me").find((s) => s.action === "merge-json")!.path).toBe("C:\\Users\\me\\.claude\\settings.json");
 });
 
@@ -547,4 +549,25 @@ test("externalDryRun reports registry steps without running them", () => {
     "would register HKCU\\Software\\X → C:\\m.json",
   ]);
   expect(calls).toEqual([]);
+});
+
+test("isAnynotateHook matches only a command that is solely our executable", () => {
+  for (const c of [
+    "anynotate hook --agent claude",
+    "/home/me/.local/bin/anynotate hook --agent claude",
+    '"/home/me/my bin/anynotate" hook --agent claude',
+    "C:/Users/me/AppData/Local/anynotate/bin/anynotate.exe hook --agent claude",
+    '"C:\\Users\\Me Me\\anynotate.exe" hook --agent claude',
+    "/opt/bun/bin/bun /home/me/src/anynotate/src/cli.ts hook --agent claude",
+    '"C:/Program Files/bun/bun.exe" "C:/my src/cli.ts" hook --agent claude',
+  ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, true]);
+  for (const c of [
+    "foo && anynotate hook --agent claude",
+    "cd /x; anynotate hook --agent claude",
+    "myanynotate hook --agent claude",
+    "anynotate hook --agent codex",
+    "node /x/cli.ts hook --agent claude",
+    "env X=1 anynotate hook --agent claude",
+    "anynotate hook --agent claude --x",
+  ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, false]);
 });

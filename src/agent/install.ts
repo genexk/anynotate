@@ -20,11 +20,20 @@ export type InstallStep = {
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-// Commands an earlier install wrote for this agent: the bare `anynotate hook --agent X` of older versions, or an
-// absolute command whose executable was anynotate, anynotate.exe or cli.ts before the binary or the clone moved.
+// Commands an earlier install wrote for this agent: nothing but our executable followed by ` hook --agent X`. The
+// executable is one token naming anynotate or anynotate.exe (the bare command of older versions, a binary or the
+// clone's launcher, wherever it lived) or bun followed by cli.ts. Compound commands such as `x && anynotate …` are
+// the user's own and never match.
+const TOKEN = String.raw`(?:"[^"]*"|[^\s"]+)`;
+const baseName = (token: string) => token.replace(/^"|"$/g, "").split(/[\\/]/).pop() ?? "";
+
 export function isAnynotateHook(command: unknown, agent: string): boolean {
   if (typeof command !== "string" || !/^[\w.-]+$/.test(agent)) return false;
-  return new RegExp(`(^|[\\\\/"\\s])(anynotate(\\.exe)?|cli\\.ts)"? hook --agent ${agent.replace(/\./g, "\\.")}$`).test(command);
+  const m = new RegExp(`^(${TOKEN})(?: (${TOKEN}))? hook --agent ${agent.replace(/\./g, "\\.")}$`).exec(command);
+  if (!m) return false;
+  const [, first, second] = m as unknown as [string, string, string | undefined];
+  if (second === undefined) return /^anynotate(\.exe)?$/.test(baseName(first));
+  return /^bun(\.exe)?$/.test(baseName(first)) && baseName(second) === "cli.ts";
 }
 
 // A config whose shape we don't recognise is reported as unmergeable rather than rewritten. A stale entry of ours is
@@ -120,7 +129,12 @@ export type InstallOptions = {
 
 const moduleRepo = resolve(import.meta.dir, "..", "..");
 
-export const hookCommand = (kind: InstallKind, agent: string) => `${quoteArgv(commandArgv(kind))} hook --agent ${agent}`;
+// On Windows the path uses forward slashes, which cmd, PowerShell and Git Bash all accept; backslashes would be
+// escapes to the bash some agents run hooks through.
+export const hookCommand = (kind: InstallKind, agent: string, platform: Platform) => {
+  const argv = commandArgv(kind);
+  return `${quoteArgv(platform === "win32" ? argv.map((a) => a.replace(/\\/g, "/")) : argv)} hook --agent ${agent}`;
+};
 
 export function planInstall(o: InstallOptions): InstallStep[] {
   const platform = o.platform ?? currentPlatform();
@@ -140,7 +154,7 @@ export function planInstall(o: InstallOptions): InstallStep[] {
           {
             path: path.join(home, ...settings.split("/")),
             action: "merge-json",
-            content: JSON.stringify({ event: "UserPromptSubmit", command: hookCommand(kind, cli), agent: cli }),
+            content: JSON.stringify({ event: "UserPromptSubmit", command: hookCommand(kind, cli, platform), agent: cli }),
           },
           { path: path.join(home, ...skill.split("/")), action: "write", content: read("assets/skill/SKILL.md") },
         ]
