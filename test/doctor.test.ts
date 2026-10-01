@@ -80,7 +80,7 @@ test("bridge down fails the bridge check and exits 1", async () => {
   const { text, code } = formatChecks(checks);
   expect(code).toBe(1);
   expect(text).toMatch(/^✗ bridge  not answering on http:\/\/127\.0\.0\.1:\d+\/health/m);
-  expect(text.trimEnd().split("\n").at(-1)).toBe("1 problem(s) found — see above.");
+  expect(text.trimEnd().split("\n").at(-1)).toBe("1 failed — see above.");
 });
 
 test("a present browser without a registration is a warning only; an absent one is not checked", async () => {
@@ -92,7 +92,7 @@ test("a present browser without a registration is a warning only; an absent one 
   const { text, code } = formatChecks(checks);
   expect(code).toBe(0);
   expect(text).toMatch(/^! native host \(edge\)  /m);
-  expect(text.trimEnd().split("\n").at(-1)).toBe("1 problem(s) found — see above.");
+  expect(text.trimEnd().split("\n").at(-1)).toBe("1 warning(s) — see above.");
 });
 
 test("a missing Chrome manifest or a host path that isn't executable fails", async () => {
@@ -201,14 +201,15 @@ test("Windows: Run value and registry keys that point at the manifest", async ()
       f.ran.push(argv);
       if (argv[1] === "query" && argv[2] === edgeKey) return { code: 1, stdout: "", stderr: "ERROR: unable to find" };
       if (argv[1] === "query" && argv.includes("/ve")) return { code: 0, stdout: regOut(argv[2]!), stderr: "" };
+      if (argv[1] === "query") return { code: 0, stdout: `    Anynotate Bridge    REG_SZ    "C:\\Windows\\System32\\wscript.exe" "${data}\\bridge.vbs"\r\n`, stderr: "" };
       return { code: 0, stdout: "", stderr: "" };
     },
   };
   const checks = await runDoctor(o);
-  expect(byName(checks, "service")).toMatchObject({ ok: true });
+  expect(byName(checks, "service")).toMatchObject({ ok: true, detail: `Run value "Anynotate Bridge" starts ${data}\\bridge.vbs` });
   expect(f.ran).toContainEqual(["reg", "query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "Anynotate Bridge"]);
   expect(byName(checks, "native host (chrome)")).toMatchObject({ ok: true });
-  expect(byName(checks, "native host (edge)")).toMatchObject({ ok: "warn", detail: expect.stringContaining("not registered") });
+  expect(byName(checks, "native host (edge)")).toMatchObject({ ok: "warn", detail: expect.stringContaining("not registered (exit 1: ERROR: unable to find)") });
   expect(byName(checks, "token")).toMatchObject({ ok: true });
 });
 
@@ -251,5 +252,79 @@ test("CLI doctor prints one line per check and a summary, skips the service unde
   expect(lines).toContain("! service  skipped (dry run)");
   expect(lines.some((l) => l.startsWith("✓ install  source "))).toBe(true);
   expect(lines.some((l) => l.startsWith("✗ bridge  not answering on http://127.0.0.1:1/health"))).toBe(true);
-  expect(lines.at(-1)).toMatch(/^\d+ problem\(s\) found — see above\.$/);
+  expect(lines.at(-1)).toMatch(/^\d+ failed(, \d+ warning\(s\))?, \d+ skipped — see above\.$/);
+});
+
+test("Windows with a non-ASCII profile: a reg value that doesn't match as printed warns, never fails", async () => {
+  const home = "C:\\Users\\Jürgen";
+  const env = { LOCALAPPDATA: `${home}\\AppData\\Local` };
+  const data = `${home}\\.anynotate`;
+  const exe = `${env.LOCALAPPDATA}\\anynotate\\bin\\anynotate.exe`;
+  const mf = win32.join(data, "dev.anynotate.host.json");
+  const f: Fake = {
+    files: { [`${data}\\install.json`]: record(exe, "win32"), [`${data}\\token`]: TOKEN, [`${data}\\bridge.vbs`]: "x", [exe]: "", [mf]: manifest(exe) },
+    dirs: [],
+    ran: [],
+    exit: () => 0,
+    health: HEALTH,
+  };
+  const garbled = (s: string) => s.replace("ü", "\u0081");
+  const o: DoctorOptions = {
+    ...options(f, "win32", home),
+    env,
+    isPrivate: () => "unknown",
+    which: () => exe,
+    exec: (argv) =>
+      argv.includes("/ve")
+        ? { code: 0, stdout: `\r\n${argv[2]}\r\n    (Default)    REG_SZ    ${garbled(mf)}\r\n`, stderr: "" }
+        : { code: 0, stdout: `    Anynotate Bridge    REG_SZ    "wscript.exe" "${garbled(`${data}\\bridge.vbs`)}"\r\n`, stderr: "" },
+  };
+  const checks = await runDoctor(o);
+  expect(byName(checks, "native host (chrome)")).toMatchObject({ ok: "warn", detail: expect.stringContaining(garbled(mf)) });
+  expect(byName(checks, "service")).toMatchObject({ ok: true, detail: 'Run value "Anynotate Bridge" present' });
+  expect(formatChecks(checks).code).toBe(0);
+});
+
+test("Windows with an ASCII path: a registry key pointing elsewhere fails for Chrome and the Run value warns", async () => {
+  const home = "C:\\Users\\me";
+  const data = `${home}\\.anynotate`;
+  const exe = `${home}\\AppData\\Local\\anynotate\\bin\\anynotate.exe`;
+  const mf = win32.join(data, "dev.anynotate.host.json");
+  const f: Fake = {
+    files: { [`${data}\\install.json`]: record(exe, "win32"), [`${data}\\token`]: TOKEN, [`${data}\\bridge.vbs`]: "x", [exe]: "", [mf]: manifest(exe) },
+    dirs: [],
+    ran: [],
+    exit: () => 0,
+    health: HEALTH,
+  };
+  const o: DoctorOptions = {
+    ...options(f, "win32", home),
+    isPrivate: () => "unknown",
+    which: () => exe,
+    exec: () => ({ code: 0, stdout: "    x    REG_SZ    C:\\elsewhere\\x.json\r\n", stderr: "" }),
+  };
+  const checks = await runDoctor(o);
+  expect(byName(checks, "native host (chrome)")).toMatchObject({ ok: false, detail: expect.stringContaining("C:\\elsewhere\\x.json") });
+  expect(byName(checks, "service")).toMatchObject({ ok: "warn" });
+});
+
+test("a failed external check carries its exit code and first stderr line", async () => {
+  const f = linuxFake();
+  const o = { ...options(f), exec: (() => ({ code: 3, stdout: "", stderr: "\nunit disabled\nmore\n" })) as Exec };
+  expect(byName(await runDoctor(o), "service")!.detail).toContain("(exit 3: unit disabled)");
+});
+
+test("PATH finding a different anynotate than the installed binary warns", async () => {
+  const f = linuxFake();
+  const checks = await runDoctor({ ...options(f), which: (cmd) => (cmd === "anynotate" ? "/usr/local/bin/anynotate" : null) });
+  expect(byName(checks, "on PATH")).toMatchObject({ ok: "warn", detail: `/usr/local/bin/anynotate runs, but the install is ${EXE}` });
+});
+
+test("the summary lists only the non-zero counts", () => {
+  const c = (ok: Check["ok"], skipped?: true): Check => ({ name: "x", ok, detail: "d", ...(skipped ? { skipped } : {}) });
+  const last = (checks: Check[]) => formatChecks(checks).text.trimEnd().split("\n").at(-1);
+  expect(last([c(true)])).toBe("All checks passed.");
+  expect(last([c(false), c(false), c("warn"), c("warn", true)])).toBe("2 failed, 1 warning(s), 1 skipped — see above.");
+  expect(last([c(true), c("warn", true)])).toBe("1 skipped — see above.");
+  expect(formatChecks([c("warn"), c("warn", true)]).code).toBe(0);
 });

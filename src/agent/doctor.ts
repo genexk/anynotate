@@ -11,7 +11,8 @@ import { HOOKED_CLIS, isAnynotateHook } from "./install";
 import { INSTALL_RECORD, type InstallRecord } from "./installkind";
 
 // ok is false for a failed required check, "warn" for something worth fixing that doesn't stop Anynotate working.
-export type Check = { name: string; ok: boolean | "warn"; detail: string };
+// skipped marks a check an external dry run did not perform; it shows as a warning and is counted separately.
+export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true };
 
 export type DoctorOptions = {
   platform: Platform;
@@ -36,6 +37,15 @@ export type DoctorOptions = {
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const SKIPPED = "skipped (dry run)";
 const TOKEN_RE = /^[0-9a-f]{64}$/;
+
+// reg.exe writes in the console's OEM/ANSI code page, so only an ASCII path can be found in its output reliably.
+const isAscii = (s: string) => /^[\x00-\x7f]*$/.test(s);
+const regValue = (stdout: string) => /REG_\w+\s+(.*?)\s*$/m.exec(stdout)?.[1] ?? stdout.trim();
+const why = (r: { code: number; stderr: string }) => {
+  const line = r.stderr.split(/\r?\n/).find((l) => l.trim())?.trim();
+  return ` (exit ${r.code}${line ? `: ${line}` : ""})`;
+};
+const skipped = (name: string, detail: string): Check => ({ name, ok: "warn", detail, skipped: true });
 
 const executable = (path: string) => {
   try {
@@ -73,25 +83,26 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     }
   };
 
+  const r = parse(path.join(dataDir, INSTALL_RECORD)) as Partial<InstallRecord> | null | undefined;
+  const record = r && (r.kind === "binary" || r.kind === "source") && typeof r.path === "string" && typeof r.version === "string" ? (r as InstallRecord) : null;
+
   const install = (): Check => {
     const name = "install";
-    const r = parse(path.join(dataDir, INSTALL_RECORD)) as Partial<InstallRecord> | null | undefined;
     if (r === undefined) return { name, ok: false, detail: `no ${path.join(dataDir, INSTALL_RECORD)} — run \`anynotate install\`` };
-    if ((r?.kind !== "binary" && r?.kind !== "source") || typeof r.path !== "string" || typeof r.version !== "string") {
-      return { name, ok: false, detail: `${path.join(dataDir, INSTALL_RECORD)} is unreadable — run \`anynotate install\`` };
-    }
-    if (!exists(r.path)) return { name, ok: false, detail: `${r.kind} ${r.version} at ${r.path}, which is missing — reinstall` };
-    if (r.version !== o.version) {
-      return { name, ok: "warn", detail: `${r.kind} ${r.version} at ${r.path}; this is ${o.version} — run \`anynotate install\`` };
-    }
-    return { name, ok: true, detail: `${r.kind} ${r.version} at ${r.path}` };
+    if (!record) return { name, ok: false, detail: `${path.join(dataDir, INSTALL_RECORD)} is unreadable — run \`anynotate install\`` };
+    const { kind, version, path: at } = record;
+    if (!exists(at)) return { name, ok: false, detail: `${kind} ${version} at ${at}, which is missing — reinstall` };
+    if (version !== o.version) return { name, ok: "warn", detail: `${kind} ${version} at ${at}; this is ${o.version} — run \`anynotate install\`` };
+    return { name, ok: true, detail: `${kind} ${version} at ${at}` };
   };
 
   const onPath = (): Check => {
+    const name = "on PATH";
     const found = which("anynotate");
-    return found
-      ? { name: "on PATH", ok: true, detail: found }
-      : { name: "on PATH", ok: "warn", detail: `anynotate is not on PATH — add ${paths.binDir}` };
+    if (!found) return { name, ok: "warn", detail: `anynotate is not on PATH — add ${paths.binDir}` };
+    const same = (a: string, b: string) => (platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
+    if (record?.kind === "binary" && !same(found, record.path)) return { name, ok: "warn", detail: `${found} runs, but the install is ${record.path}` };
+    return { name, ok: true, detail: found };
   };
 
   const service = (): Check => {
@@ -102,25 +113,29 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
       const unit = plan(true).files[0]!.path;
       const desktop = plan(false).files[0]!.path;
       if (exists(unit)) {
-        if (o.externalDryRun) return { name, ok: "warn", detail: SKIPPED };
-        return exec(["systemctl", "--user", "is-enabled", SYSTEMD_UNIT]).code === 0
+        if (o.externalDryRun) return skipped(name, SKIPPED);
+        const res = exec(["systemctl", "--user", "is-enabled", SYSTEMD_UNIT]);
+        return res.code === 0
           ? { name, ok: true, detail: `${SYSTEMD_UNIT} enabled (systemd)` }
-          : { name, ok: false, detail: `${unit} exists but ${SYSTEMD_UNIT} is not enabled — run \`anynotate install\`` };
+          : { name, ok: false, detail: `${unit} exists but ${SYSTEMD_UNIT} is not enabled${why(res)} — run \`anynotate install\`` };
       }
       if (exists(desktop)) return { name, ok: true, detail: `autostart entry ${desktop}` };
       return { name, ok: false, detail: `no ${unit} or ${desktop} — run \`anynotate install\`` };
     }
     const file = plan(false).files[0]!.path;
     if (!exists(file)) return { name, ok: false, detail: `no ${file} — run \`anynotate install\`` };
-    if (o.externalDryRun) return { name, ok: "warn", detail: SKIPPED };
+    if (o.externalDryRun) return skipped(name, SKIPPED);
     if (platform === "darwin") {
-      return exec(["launchctl", "print", `gui/${o.uid}/${LAUNCHD_LABEL}`]).code === 0
+      const res = exec(["launchctl", "print", `gui/${o.uid}/${LAUNCHD_LABEL}`]);
+      return res.code === 0
         ? { name, ok: true, detail: `${LAUNCHD_LABEL} loaded` }
-        : { name, ok: false, detail: `${file} exists but ${LAUNCHD_LABEL} is not loaded — run \`anynotate install\`` };
+        : { name, ok: false, detail: `${file} exists but ${LAUNCHD_LABEL} is not loaded${why(res)} — run \`anynotate install\`` };
     }
-    return exec(["reg", "query", RUN_KEY, "/v", WINDOWS_TASK]).code === 0
-      ? { name, ok: true, detail: `Run value "${WINDOWS_TASK}" starts ${file}` }
-      : { name, ok: false, detail: `no Run value "${WINDOWS_TASK}" in ${RUN_KEY} — run \`anynotate install\`` };
+    const res = exec(["reg", "query", RUN_KEY, "/v", WINDOWS_TASK]);
+    if (res.code !== 0) return { name, ok: false, detail: `no Run value "${WINDOWS_TASK}" in ${RUN_KEY}${why(res)} — run \`anynotate install\`` };
+    if (res.stdout.toLowerCase().includes(file.toLowerCase())) return { name, ok: true, detail: `Run value "${WINDOWS_TASK}" starts ${file}` };
+    if (!isAscii(file)) return { name, ok: true, detail: `Run value "${WINDOWS_TASK}" present` };
+    return { name, ok: "warn", detail: `Run value "${WINDOWS_TASK}" is ${regValue(res.stdout)}, not ${file} — run \`anynotate install\`` };
   };
 
   const bridge = async (): Promise<Check> => {
@@ -172,10 +187,13 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     const problem = manifestProblem(file);
     if (problem) return { name, ok: fail, detail: problem + fix };
     const key = browserRegistryKey(b);
-    if (o.externalDryRun) return { name, ok: "warn", detail: `${file}; registry ${SKIPPED}` };
-    const r = exec(["reg", "query", key, "/ve"]);
-    if (r.code !== 0) return { name, ok: fail, detail: `${key} is not registered${fix}` };
-    if (!r.stdout.toLowerCase().includes(file.toLowerCase())) return { name, ok: fail, detail: `${key} does not point at ${file}${fix}` };
+    if (o.externalDryRun) return skipped(name, `${file}; registry ${SKIPPED}`);
+    const res = exec(["reg", "query", key, "/ve"]);
+    if (res.code !== 0) return { name, ok: fail, detail: `${key} is not registered${why(res)}${fix}` };
+    if (!res.stdout.toLowerCase().includes(file.toLowerCase())) {
+      const detail = `${key} is ${regValue(res.stdout)}, expected ${file}`;
+      return isAscii(file) ? { name, ok: fail, detail: detail + fix } : { name, ok: "warn", detail: `${detail} (non-ASCII path, compared as reg.exe printed it)` };
+    }
     return { name, ok: true, detail: `${key} → ${file}` };
   };
 
@@ -221,10 +239,17 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
 
 const SYMBOL = (ok: Check["ok"]) => (ok === true ? "✓" : ok === false ? "✗" : "!");
 
-// Exit 1 only when a required check failed; warnings are counted as problems but leave the exit code at 0.
+// Exit 1 only when a required check failed; warnings and skipped checks are listed but leave the exit code at 0.
 export function formatChecks(checks: Check[]): { text: string; code: number } {
   const lines = checks.map((c) => `${SYMBOL(c.ok)} ${c.name}  ${c.detail}`);
-  const problems = checks.filter((c) => c.ok !== true).length;
-  lines.push(problems === 0 ? "All checks passed." : `${problems} problem(s) found — see above.`);
-  return { text: `${lines.join("\n")}\n`, code: checks.some((c) => c.ok === false) ? 1 : 0 };
+  const failed = checks.filter((c) => c.ok === false).length;
+  const warnings = checks.filter((c) => c.ok === "warn" && !c.skipped).length;
+  const skippedCount = checks.filter((c) => c.skipped).length;
+  const parts = [
+    failed ? `${failed} failed` : "",
+    warnings ? `${warnings} warning(s)` : "",
+    skippedCount ? `${skippedCount} skipped` : "",
+  ].filter(Boolean);
+  lines.push(parts.length === 0 ? "All checks passed." : `${parts.join(", ")} — see above.`);
+  return { text: `${lines.join("\n")}\n`, code: failed > 0 ? 1 : 0 };
 }
