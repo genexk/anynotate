@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import type { Platform } from "../platform/os";
 
+class UpdateError extends Error {}
+
 export const RELEASES_API = "https://api.github.com/repos/genexk/anynotate/releases/latest";
 
 // Release downloads redirect from github.com to GitHub's asset storage; nothing else is ever fetched.
@@ -14,6 +16,7 @@ const ALLOWED_HOSTS = new Set([
 const API_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_REDIRECTS = 5;
+export const DEFAULT_LIMITS = { text: 64 * 1024, binary: 200 * 1024 * 1024 };
 
 const ASSET_OS: Record<Platform, string> = { darwin: "darwin", linux: "linux", win32: "windows" };
 const SUPPORTED = new Set(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"]);
@@ -58,12 +61,24 @@ export function compareVersions(a: string, b: string): number {
   return comparePre(x.pre, y.pre);
 }
 
-// `<hex>  <name>` per line, as sha256sum writes it; a `*` before the name marks binary mode.
-export function parseSums(text: string): Map<string, string> {
+// `<hex>  <name>` per line, as sha256sum writes it; a `*` before the name marks binary mode. Unparseable lines are
+// skipped, except one naming `target`; a name listed twice with different hashes makes the whole file untrustworthy.
+export function parseSums(text: string, target?: string): Map<string, string> {
   const sums = new Map<string, string>();
-  for (const line of text.split(/\r?\n/)) {
-    const m = /^([0-9a-fA-F]{64}) [ *](.+)$/.exec(line.trim());
-    if (m) sums.set(m[2]!, m[1]!.toLowerCase());
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = /^([0-9a-fA-F]{64}) [ *](.+)$/.exec(line);
+    if (!m) {
+      if (target !== undefined && line.split(/\s+/).at(-1)?.replace(/^\*/, "") === target) {
+        throw new UpdateError(`malformed SHA256SUMS line for ${target}`);
+      }
+      continue;
+    }
+    const [, hex, name] = m;
+    const prev = sums.get(name!);
+    if (prev !== undefined && prev !== hex!.toLowerCase()) throw new UpdateError(`SHA256SUMS lists ${name} twice with different hashes`);
+    sums.set(name!, hex!.toLowerCase());
   }
   return sums;
 }
@@ -81,9 +96,11 @@ export type SelfUpdateOptions = {
   stop: () => boolean;
   // Runs `install --no-hints` with the given (new) executable, which also restarts the bridge; returns its exit code.
   reinstall: (exe: string) => number;
+  // The binary install.json records; a different running copy is updated anyway, with a warning.
+  recordedPath?: string | null;
+  limits?: { text: number; binary: number };
+  rename?: (from: string, to: string) => void;
 };
-
-class UpdateError extends Error {}
 
 function checkHost(url: string): URL {
   let u: URL;
@@ -112,22 +129,71 @@ async function get(o: SelfUpdateOptions, url: string, accept: string, timeoutMs:
     }
     const location = res.headers.get("location");
     if (res.status >= 300 && res.status < 400 && location) {
+      await discard(res);
       next = new URL(location, next).toString();
       continue;
     }
-    if (!res.ok) throw new UpdateError(`cannot fetch ${next}: HTTP ${res.status}`);
+    if (!res.ok) {
+      await discard(res);
+      throw new UpdateError(`cannot fetch ${next}: HTTP ${res.status}`);
+    }
     return res;
   }
   throw new UpdateError(`too many redirects fetching ${url}`);
 }
 
+async function discard(res: Response): Promise<void> {
+  try {
+    await res.body?.cancel();
+  } catch {}
+}
+
+// Reads at most `cap` bytes: a larger declared length is refused unread, and a body that runs past it is cancelled.
+async function readCapped(res: Response, cap: number, what: string): Promise<Uint8Array> {
+  const tooLarge = () => new UpdateError(`${what} is too large (over ${cap} bytes)`);
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > cap) {
+    await discard(res);
+    throw tooLarge();
+  }
+  if (!res.body) return new Uint8Array(0);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > cap) {
+        await reader.cancel().catch(() => {});
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  } catch (e) {
+    if (e instanceof UpdateError) throw e;
+    throw new UpdateError(`cannot read ${what}: ${(e as Error).message}`);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
+}
+
+const limitsOf = (o: SelfUpdateOptions) => o.limits ?? DEFAULT_LIMITS;
+
 type Release = { tag: string; assets: Map<string, string> };
 
 async function latestRelease(o: SelfUpdateOptions): Promise<Release> {
   const res = await get(o, RELEASES_API, "application/vnd.github+json", API_TIMEOUT_MS);
+  const body = await readCapped(res, limitsOf(o).text, "the release JSON");
   let json: { tag_name?: unknown; assets?: unknown };
   try {
-    json = await res.json();
+    json = JSON.parse(new TextDecoder().decode(body));
   } catch {
     throw new UpdateError("the GitHub releases API returned something other than JSON");
   }
@@ -149,6 +215,12 @@ export async function selfUpdate(o: SelfUpdateOptions): Promise<number> {
   };
   const staged = `${exe}.new`;
   const old = `${exe}.old`;
+  const rename = o.rename ?? renameSync;
+  const limits = limitsOf(o);
+
+  if (o.recordedPath && o.recordedPath !== exe) {
+    o.err(`anynotate update: warning: install.json records ${o.recordedPath}, but this is ${exe}; updating ${exe}`);
+  }
 
   // The previous run's executable, renamed aside while it was still running; it may still be locked.
   if (o.platform === "win32" && !o.dryRun) {
@@ -192,31 +264,55 @@ export async function selfUpdate(o: SelfUpdateOptions): Promise<number> {
       return 0;
     }
 
-    const sums = parseSums(await (await get(o, sumsUrl, "application/octet-stream", API_TIMEOUT_MS)).text());
+    const sumsRes = await get(o, sumsUrl, "application/octet-stream", API_TIMEOUT_MS);
+    const sums = parseSums(new TextDecoder().decode(await readCapped(sumsRes, limits.text, "SHA256SUMS")), name);
     const expected = sums.get(name);
     if (!expected) throw new UpdateError(`SHA256SUMS of ${release.tag} has no entry for ${name}`);
-    const bytes = new Uint8Array(await (await get(o, assetUrl, "application/octet-stream", DOWNLOAD_TIMEOUT_MS)).arrayBuffer());
+    const assetRes = await get(o, assetUrl, "application/octet-stream", DOWNLOAD_TIMEOUT_MS);
+    const bytes = await readCapped(assetRes, limits.binary, name);
     if (sha256(bytes) !== expected) throw new UpdateError(`checksum mismatch for ${name}; nothing was changed`);
 
     try {
-      writeFileSync(staged, bytes, { mode: 0o755 });
+      // A fresh file: whatever sits at exe.new (a leftover, or a planted symlink) is removed, never written through.
+      rmSync(staged, { force: true });
+      writeFileSync(staged, bytes, { mode: 0o755, flag: "wx" });
       chmodSync(staged, 0o755);
       if (sha256(readFileSync(staged)) !== expected) throw new UpdateError(`checksum mismatch after writing ${staged}; nothing was changed`);
-      if (o.platform === "win32") {
-        if (!o.stop()) throw new UpdateError("could not stop the bridge; nothing was changed");
-        renameSync(exe, old);
-        try {
-          renameSync(staged, exe);
-        } catch (e) {
-          renameSync(old, exe);
-          throw e;
-        }
-      } else {
-        renameSync(staged, exe);
-      }
+      if (o.platform !== "win32") rename(staged, exe);
     } catch (e) {
       rmSync(staged, { force: true });
       throw e;
+    }
+
+    // Windows will not replace a running executable, but it will rename one: move it aside, then move the new one in.
+    if (o.platform === "win32") {
+      if (!o.stop()) {
+        rmSync(staged, { force: true });
+        throw new UpdateError("could not stop the bridge; nothing was changed");
+      }
+      const restartOld = (why: string) => {
+        rmSync(staged, { force: true });
+        const code = o.reinstall(exe);
+        const restarted = code === 0 ? "the bridge was restarted on it" : `restarting the bridge failed (exit ${code}); run \`anynotate install\``;
+        return fail(`${why}; ${exe} is unchanged and ${restarted}`);
+      };
+      try {
+        rename(exe, old);
+      } catch (e) {
+        return restartOld(`could not move ${exe} aside: ${(e as Error).message}`);
+      }
+      try {
+        rename(staged, exe);
+      } catch (e) {
+        const why = `could not move the new binary into ${exe}: ${(e as Error).message}`;
+        try {
+          rename(old, exe);
+        } catch {
+          rmSync(staged, { force: true });
+          return fail(`${why}; could not restore ${exe}; rename ${old} back to ${exe} manually`);
+        }
+        return restartOld(why);
+      }
     }
     log(`replaced ${exe} with ${release.tag}`);
 

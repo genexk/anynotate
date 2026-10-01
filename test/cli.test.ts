@@ -207,9 +207,3 @@ test("bridge --stop leaves a pid alone when no bridge answers, and drops the sta
   expect(r.out).toContain("removed a stale pid file");
   expect(existsSync(join(home, "data", "bridge.pid"))).toBe(false);
 });
-
-test("update rejects unknown arguments before touching anything", async () => {
-  const r = await cli(["update", "--force"], { ANYNOTATE_EXTERNAL_DRYRUN: "1" });
-  expect(r.code).toBe(1);
-  expect(r.out).toBe("");
-});

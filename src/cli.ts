@@ -173,6 +173,7 @@ switch (cmd) {
       arch: process.arch,
       current: pkg.version,
       exe: kind.exe,
+      recordedPath: readInstallRecord(paths.dataDir)?.path,
       fetch,
       dryRun,
       log,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assetName, compareVersions, parseSums, RELEASES_API, selfUpdate, type SelfUpdateOptions } from "../src/agent/selfupdate";
@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-type Served = { status?: number; body?: string; headers?: Record<string, string> };
+type Served = { status?: number; body?: string; headers?: Record<string, string>; stream?: number };
 
 function release(tag: string, name = "anynotate-darwin-arm64", newBytes = "new binary", sums?: string) {
   const routes: Record<string, Served> = {
@@ -38,14 +38,34 @@ function release(tag: string, name = "anynotate-darwin-arm64", newBytes = "new b
 
 function fakeFetch(routes: Record<string, Served>) {
   const calls: { url: string; init?: RequestInit }[] = [];
+  const cancelled: string[] = [];
   const f = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
     const r = routes[url];
     if (!r) return new Response("not found", { status: 404 });
-    return new Response(r.body ?? "", { status: r.status ?? 200, headers: r.headers });
+    // Bodies are streams so tests can see whether a response was cancelled or read past a cap.
+    let left = r.stream ?? 0;
+    const text = new TextEncoder().encode(r.body ?? "");
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        if (!sent && text.length > 0) {
+          sent = true;
+          c.enqueue(text);
+        } else if (left > 0) {
+          const n = Math.min(left, 1024);
+          left -= n;
+          c.enqueue(new Uint8Array(n));
+        } else c.close();
+      },
+      cancel() {
+        cancelled.push(url);
+      },
+    });
+    return new Response(body, { status: r.status ?? 200, headers: r.headers });
   }) as unknown as typeof fetch;
-  return { calls, fetch: f };
+  return { calls, cancelled, fetch: f };
 }
 
 async function run(routes: Record<string, Served>, o: Partial<SelfUpdateOptions> = {}) {
@@ -73,7 +93,7 @@ async function run(routes: Record<string, Served>, o: Partial<SelfUpdateOptions>
     },
     ...o,
   });
-  return { code, out, err, calls: f.calls, reinstalls, stops };
+  return { code, out, err, calls: f.calls, cancelled: f.cancelled, reinstalls, stops };
 }
 
 test("asset names match the release builder", () => {
@@ -252,4 +272,125 @@ test("a failed reinstall is an error, reported after the swap", async () => {
   expect(r.code).toBe(1);
   expect(readFileSync(exe, "utf8")).toBe("new binary");
   expect(r.err.join("\n")).toContain("install");
+});
+
+test("redirect bodies are cancelled before the next hop", async () => {
+  const routes = release("v0.4.1");
+  routes[`${DL}/v0.4.1/anynotate-darwin-arm64`] = { status: 302, body: "moved", headers: { location: "https://objects.githubusercontent.com/x/bin" } };
+  routes["https://objects.githubusercontent.com/x/bin"] = { body: "new binary" };
+  const r = await run(routes);
+  expect(r.code).toBe(0);
+  expect(r.cancelled).toContain(`${DL}/v0.4.1/anynotate-darwin-arm64`);
+});
+
+test("size caps: a declared Content-Length over the cap is refused unread", async () => {
+  const routes = release("v0.4.1");
+  routes[`${DL}/v0.4.1/anynotate-darwin-arm64`] = { body: "new binary", headers: { "content-length": "5000" } };
+  const r = await run(routes, { limits: { text: 64 * 1024, binary: 4096 } });
+  expect(r.code).toBe(1);
+  expect(r.err.join("\n")).toContain("too large");
+  expect(r.cancelled).toContain(`${DL}/v0.4.1/anynotate-darwin-arm64`);
+  expect(readFileSync(exe, "utf8")).toBe("old binary");
+});
+
+test("size caps: a body that streams past the cap is aborted", async () => {
+  const routes = release("v0.4.1");
+  routes[`${DL}/v0.4.1/anynotate-darwin-arm64`] = { stream: 1_000_000 };
+  const r = await run(routes, { limits: { text: 64 * 1024, binary: 8192 } });
+  expect(r.code).toBe(1);
+  expect(r.err.join("\n")).toContain("too large");
+  expect(r.cancelled).toContain(`${DL}/v0.4.1/anynotate-darwin-arm64`);
+});
+
+test("size caps: the release JSON and SHA256SUMS are capped at 64 KB by default", async () => {
+  const big = { ...release("v0.4.1") };
+  big[RELEASES_API] = { body: "{", stream: 70 * 1024 };
+  expect((await run(big)).err.join("\n")).toContain("too large");
+  const sums = release("v0.4.1");
+  sums[`${DL}/v0.4.1/SHA256SUMS`] = { stream: 70 * 1024 };
+  const r = await run(sums);
+  expect(r.code).toBe(1);
+  expect(r.err.join("\n")).toContain("too large");
+});
+
+test("SHA256SUMS: conflicting duplicates and a malformed line for the target are rejected", () => {
+  const a = sha("a");
+  const b = sha("b");
+  expect(() => parseSums(`${a}  anynotate-linux-x64\n${b}  anynotate-linux-x64\n`)).toThrow("anynotate-linux-x64");
+  expect(parseSums(`${a}  anynotate-linux-x64\n${a}  anynotate-linux-x64\n`).get("anynotate-linux-x64")).toBe(a);
+  expect(() => parseSums(`${a.slice(1)}  anynotate-linux-x64\n`, "anynotate-linux-x64")).toThrow("malformed");
+  expect(parseSums(`nonsense  anynotate-darwin-x64\n${a}  anynotate-linux-x64\n`, "anynotate-linux-x64").get("anynotate-linux-x64")).toBe(a);
+});
+
+test("a malformed SHA256SUMS line for the asset fails the update", async () => {
+  const r = await run(release("v0.4.1", "anynotate-darwin-arm64", "new binary", `${sha("new binary")}x  anynotate-darwin-arm64\n`));
+  expect(r.code).toBe(1);
+  expect(r.err.join("\n")).toContain("malformed");
+  expect(readFileSync(exe, "utf8")).toBe("old binary");
+});
+
+test("a symlink planted at exe.new is replaced, not followed", async () => {
+  const victim = join(dir, "victim");
+  writeFileSync(victim, "keep me");
+  symlinkSync(victim, `${exe}.new`);
+  const r = await run(release("v0.4.1"));
+  expect(r.code).toBe(0);
+  expect(readFileSync(victim, "utf8")).toBe("keep me");
+  expect(lstatSync(exe).isSymbolicLink()).toBe(false);
+  expect(readFileSync(exe, "utf8")).toBe("new binary");
+});
+
+test("warns, and still updates, when this binary is not the one install.json records", async () => {
+  const r = await run(release("v0.4.1"), { recordedPath: "/home/me/.local/bin/anynotate" });
+  expect(r.code).toBe(0);
+  expect(r.err.join("\n")).toContain("/home/me/.local/bin/anynotate");
+  expect(r.err.join("\n")).toContain(exe);
+  expect(readFileSync(exe, "utf8")).toBe("new binary");
+  expect((await run(release("v0.4.1"), { recordedPath: exe })).err).toEqual([]);
+});
+
+const winExe = () => {
+  exe = join(dir, "anynotate.exe");
+  writeFileSync(exe, "old binary");
+};
+
+test("win32: a failed swap after stopping the bridge restores the old exe and restarts it", async () => {
+  winExe();
+  const rename = (from: string, to: string) => {
+    if (from.endsWith(".new")) throw new Error("EBUSY");
+    renameSync(from, to);
+  };
+  const r = await run(release("v0.4.1", "anynotate-windows-x64.exe"), { platform: "win32", arch: "x64", rename });
+  expect(r.code).toBe(1);
+  expect(readFileSync(exe, "utf8")).toBe("old binary");
+  expect(existsSync(`${exe}.new`)).toBe(false);
+  expect(r.reinstalls).toEqual([exe]);
+  expect(r.err.join("\n")).toContain("EBUSY");
+  expect(r.err.join("\n")).not.toContain("nothing was changed");
+});
+
+test("win32: a failed move-aside after stopping the bridge restarts the untouched exe", async () => {
+  winExe();
+  const rename = (from: string, to: string) => {
+    if (to.endsWith(".old")) throw new Error("EPERM");
+    renameSync(from, to);
+  };
+  const r = await run(release("v0.4.1", "anynotate-windows-x64.exe"), { platform: "win32", arch: "x64", rename });
+  expect(r.code).toBe(1);
+  expect(readFileSync(exe, "utf8")).toBe("old binary");
+  expect(existsSync(`${exe}.new`)).toBe(false);
+  expect(r.reinstalls).toEqual([exe]);
+});
+
+test("win32: when the rollback also fails, says how to restore by hand and does not restart", async () => {
+  winExe();
+  const rename = (from: string, to: string) => {
+    if (from.endsWith(".new") || from.endsWith(".old")) throw new Error("EBUSY");
+    renameSync(from, to);
+  };
+  const r = await run(release("v0.4.1", "anynotate-windows-x64.exe"), { platform: "win32", arch: "x64", rename });
+  expect(r.code).toBe(1);
+  expect(r.err.join("\n")).toContain(`could not restore ${exe}; rename ${exe}.old back to ${exe} manually`);
+  expect(readFileSync(`${exe}.old`, "utf8")).toBe("old binary");
+  expect(r.reinstalls).toEqual([]);
 });
