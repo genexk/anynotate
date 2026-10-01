@@ -53,3 +53,17 @@ test("agent names outside ^[a-z][a-z0-9_-]{0,31}$ are rejected", () => {
   }
   expect(Target.safeParse({ agent: "a".repeat(32) }).success).toBe(true);
 });
+
+test("intent accepts explain, change, approve and the legacy values, and may be absent", () => {
+  for (const intent of ["explain", "change", "approve", "question", "bug", "note"]) {
+    const x = structuredClone(sampleInput) as any;
+    x.annotations[0].intent = intent;
+    expect(BundleInput.safeParse(x).success).toBe(true);
+  }
+  const praise = structuredClone(sampleInput) as any;
+  praise.annotations[0].intent = "praise";
+  expect(BundleInput.safeParse(praise).success).toBe(false);
+  const none = structuredClone(sampleInput) as any;
+  delete none.annotations[0].intent;
+  expect(BundleInput.parse(none).annotations[0]!.intent).toBeUndefined();
+});

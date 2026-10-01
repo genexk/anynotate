@@ -16,7 +16,7 @@ export const exampleBundleInput: BundleInput = {
   target: { agent: "claude", sessionId: "s-1", cwd: "/tmp/repo" },
   overall: "can we make this vegan?",
   annotations: [{
-    id: "A1", kind: "text", comment: "is there a substitute for cream?", intent: "question",
+    id: "A1", kind: "text", comment: "is there a substitute for cream?", intent: "explain",
     anchor: {
       quote: { exact: "200 ml cream", prefix: "stir in ", suffix: " before serving" },
       css: "section#ingredients > li:nth-child(3)", path: ["main", "section#ingredients", "ul"], near: "Ingredients",
@@ -49,7 +49,7 @@ export type Exchange = {
   response: { schema: SchemaName; example: unknown };
 };
 
-const health = { ok: true, bridgeVersion: "0.2.0", protocol: { version: 1, min: 1 } };
+const health = { ok: true, bridgeVersion: "0.3.0", protocol: { version: 2, min: 1 } };
 const queued = { state: "queued", at: "2026-09-24T15:32:01.000Z" };
 const exampleBundle = { ...exampleBundleInput, id: EXAMPLE_BUNDLE_ID, files: { page: "page.md", screenshot: "screenshot.png" } };
 

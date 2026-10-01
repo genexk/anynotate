@@ -1,4 +1,10 @@
-import type { Annotation, Bundle } from "@anynotate/protocol";
+import { type Annotation, type Bundle, INTENTS, type Intent } from "@anynotate/protocol";
+
+const DIRECTIVES: Record<Intent, string> = {
+  explain: "**Explain** this.",
+  change: "**Change requested.**",
+  approve: "**Approved** — no change needed.",
+};
 
 function where(a: Annotation): string {
   const parts: string[] = [];
@@ -11,8 +17,10 @@ function where(a: Annotation): string {
 }
 
 function section(a: Annotation, uploaded: ReadonlySet<string>): string {
-  const head = [a.id, a.kind, a.intent, where(a)].filter(Boolean).join(" · ");
+  const directive = a.intent && (INTENTS as readonly string[]).includes(a.intent) ? DIRECTIVES[a.intent as Intent] : undefined;
+  const head = [a.id, a.kind, directive ? undefined : a.intent, where(a)].filter(Boolean).join(" · ");
   const lines = [`## ${head}`];
+  if (directive) lines.push(directive);
   if (a.anchor.quote) lines.push(`> quote: "${a.anchor.quote.exact}"`);
   lines.push(`Comment: ${a.comment || "(no comment)"}`);
   lines.push(`Crop: ${uploaded.has(a.crop) ? a.crop : "(none)"} · selector: \`${a.anchor.css}\``);

@@ -23,6 +23,15 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.anynotate.bridge.pli
 
 `install --dry-run` lists what would be written to `~/.claude` and `~/.codex` (only if installed), `~/.anynotate/origins`, `~/.local/bin`, the Chrome helper (`~/.anynotate/native-host` and `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json`) and the launchd plist; the `launchctl` line starts the bridge.
 
+## Updating
+
+```bash
+~/.local/bin/anynotate update --dry-run   # show the steps without running them
+~/.local/bin/anynotate update
+```
+
+`update` pulls the clone (`git pull --ff-only`), runs `bun install`, re-runs `anynotate install`, restarts the launchd bridge and prints the old and new version. It needs a clean clone on `main`: on any other branch, or with uncommitted changes, it refuses and changes nothing. It stops at the first step that fails and does not undo the steps before it; fix the cause and run it again.
+
 ## Usage
 
 Anynotate has two halves: a bridge on `127.0.0.1` that accepts annotation bundles, and a prompt hook that hands queued bundles to the CLI session they were aimed at.

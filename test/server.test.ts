@@ -220,10 +220,10 @@ function rawGet(port: number, path: string, headers: Record<string, string>): Pr
   });
 }
 
-test("health answers the protocol v1 handshake", async () => {
+test("health answers the protocol handshake", async () => {
   for (const init of [{ method: "POST", headers: EXT }, {}] as RequestInit[]) {
     const body = await (await fetch(`${base}/health`, init)).json();
-    expect(HealthResponse.parse(body)).toEqual({ ok: true, bridgeVersion: pkg.version, protocol: { version: 1, min: 1 } });
+    expect(HealthResponse.parse(body)).toEqual({ ok: true, bridgeVersion: pkg.version, protocol: { version: 2, min: 1 } });
   }
 });
 

@@ -1,12 +1,12 @@
-# Anynotate protocol v1
+# Anynotate protocol v2
 
 The bridge is an HTTP server on `127.0.0.1`, port `47291` by default (`ANYNOTATE_PORT`). Clients send annotation **bundles**; the bridge stores each one as a folder and delivers it to an AI agent session. Constants and schemas live in `@anynotate/protocol`; request/response examples for the extension-facing endpoints live in `@anynotate/protocol/fixtures` (`conformance`).
 
 ## Handshake
 
-`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.2.0", "protocol": { "version": 1, "min": 1 } }`.
+`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.3.0", "protocol": { "version": 2, "min": 1 } }`.
 
-A client supports a range of protocol versions (the extension: `min 1, max 1`) and calls `compatibility(clientRange, response.protocol)`:
+A client supports a range of protocol versions (the extension: `min 2, max 2`) and calls `compatibility(clientRange, response.protocol)`:
 
 - `ok` — the ranges overlap; proceed.
 - `bridge-too-old` — ask the user to update the bridge; don't send.
@@ -66,11 +66,28 @@ Each bundle is written to `$ANYNOTATE_HOME/inbox/<id>/` (default `~/.anynotate`)
 
 `$ANYNOTATE_HOME/inbox/latest` points at the newest bundle.
 
+## Intents
+
+Each annotation may carry an `intent` telling the agent what the user wants. `INTENTS` lists the current ones; `README.md` puts a directive line under the note's heading instead of naming the intent:
+
+| `intent` | Directive in `README.md` |
+|---|---|
+| `explain` | `**Explain** this.` |
+| `change` | `**Change requested.**` |
+| `approve` | `**Approved** — no change needed.` |
+
+The v1 values `question`, `bug` and `note` are still accepted and appear in the heading as before, with no directive line. `change` was also a v1 value; it keeps its name and now gets the directive line. No `intent` means no directive either.
+
 ## Evolution
 
 - Additive changes — optional fields, new endpoints — keep `PROTOCOL_VERSION`. Both sides ignore fields they don't know.
 - Removing, renaming or changing the meaning of anything bumps `PROTOCOL_VERSION`; the bridge keeps accepting the previous version (`PROTOCOL_MIN`) for at least one release.
 - The bundle format has its own `v` (currently `1`); the agent-facing `README.md` stays human-readable.
+
+### Version history
+
+- **v1** — handshake, token-only access, native-host token delivery.
+- **v2** — intents `explain`, `change`, `approve` (legacy `question`, `bug`, `note` still accepted). `PROTOCOL_MIN` stays `1`: a v2 bridge accepts v1 clients.
 
 ## Threat model
 

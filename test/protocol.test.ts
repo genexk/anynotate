@@ -1,13 +1,27 @@
 import { expect, test } from "bun:test";
 import {
-  AckRequest, BundleInput, BundleStatusResponse, compatibility, ErrorResponse, HealthResponse, OkResponse,
+  AckRequest, BundleInput, BundleStatusResponse, compatibility, ErrorResponse, HealthResponse, INTENTS, LEGACY_INTENTS, OkResponse,
   PROTOCOL_MIN, PROTOCOL_VERSION, SendResponse, SessionsResponse,
 } from "@anynotate/protocol";
 import { conformance, EXAMPLE_BUNDLE_ID, exampleBundleInput, responseSchemas } from "@anynotate/protocol/fixtures";
 
-test("protocol v1 constants", () => {
-  expect(PROTOCOL_VERSION).toBe(1);
+test("protocol v2 constants", () => {
+  expect(PROTOCOL_VERSION).toBe(2);
   expect(PROTOCOL_MIN).toBe(1);
+  expect(INTENTS).toEqual(["explain", "change", "approve"]);
+  expect(LEGACY_INTENTS).toEqual(["question", "bug", "note"]);
+});
+
+test("every current and legacy intent parses", () => {
+  for (const intent of [...INTENTS, ...LEGACY_INTENTS]) {
+    const annotations = [{ ...exampleBundleInput.annotations[0]!, intent }];
+    expect(BundleInput.safeParse({ ...exampleBundleInput, annotations }).success).toBe(true);
+  }
+});
+
+test("a v2-only client refuses a v1 bridge, and a v1 client keeps working with a v2 bridge", () => {
+  expect(compatibility({ min: 2, max: 2 }, { version: 1, min: 1 })).toBe("bridge-too-old");
+  expect(compatibility({ min: 1, max: 1 }, { version: 2, min: 1 })).toBe("ok");
 });
 
 test("compatibility needs overlapping ranges and says which side is behind", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@anynotate/protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Wire types and zod schemas shared by Anynotate clients and the Anynotate bridge.",
   "license": "Apache-2.0",
   "author": "Kun Xu",

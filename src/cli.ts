@@ -1,10 +1,11 @@
-import { writeSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
 import { runNativeHost } from "./agent/native-host";
+import { runUpdate, spawnExec } from "./agent/update";
 import { addOrigin, ORIGIN_RE, readOrigins, removeOrigin } from "./bridge/origins";
 import { createBridge } from "./bridge/server";
 import { loadOrCreateToken } from "./bridge/token";
@@ -75,11 +76,24 @@ switch (cmd) {
     const steps = planInstall({ home: homedir(), anynotateBin: join(repo, "bin/anynotate"), repo });
     const log = applyInstall(steps, dry);
     for (const line of log) console.log(line);
-    if (!dry) console.log("Next: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.anynotate.bridge.plist");
-    if (!dry && log.some((l) => l.startsWith("added   origin"))) {
+    const hints = !dry && !rest.includes("--no-hints");
+    if (hints) console.log("Next: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.anynotate.bridge.plist");
+    if (hints && log.some((l) => l.startsWith("added   origin"))) {
       console.log("If the bridge was already running: launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge");
     }
     break;
+  }
+  case "update": {
+    const code = runUpdate({
+      repo,
+      uid: process.getuid?.() ?? 501,
+      exec: spawnExec,
+      dryRun: rest.includes("--dry-run"),
+      log: (line) => console.log(line),
+      err: (line) => console.error(line),
+      readVersion: () => JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).version,
+    });
+    process.exit(code);
   }
   case "origin": {
     const [sub, value] = rest;
@@ -106,6 +120,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>>");
+    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>>");
     process.exit(cmd ? 1 : 0);
 }

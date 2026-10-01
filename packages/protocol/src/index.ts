@@ -4,6 +4,11 @@ export const AGENT_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 export const Agent = z.string().regex(AGENT_NAME);
 export type Agent = z.infer<typeof Agent>;
 
+export const INTENTS = ["explain", "change", "approve"] as const;
+export const LEGACY_INTENTS = ["question", "bug", "note"] as const;
+/** The intent clients should send; parsed annotations may also hold a LEGACY_INTENTS value. */
+export type Intent = (typeof INTENTS)[number];
+
 const Box = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
 
 export const Annotation = z.object({
@@ -11,7 +16,7 @@ export const Annotation = z.object({
   // v1 kinds only; "region" | "draw" are reserved for later tools.
   kind: z.enum(["text", "element"]),
   comment: z.string(),
-  intent: z.enum(["question", "change", "bug", "note"]).optional(),
+  intent: z.enum([...INTENTS, ...LEGACY_INTENTS]).optional(),
   anchor: z.object({
     quote: z.object({ exact: z.string(), prefix: z.string(), suffix: z.string() }).optional(),
     position: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
@@ -87,9 +92,9 @@ export const Session = z.object({
 });
 export type Session = z.infer<typeof Session>;
 
-// Protocol v1. Additive changes (optional fields, new endpoints) keep the version; removals, renames and
+// Protocol v2. Additive changes (optional fields, new endpoints) keep the version; removals, renames and
 // semantic changes bump PROTOCOL_VERSION, and the bridge keeps accepting the previous version for a release.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const PROTOCOL_MIN = 1;
 
 export const HealthResponse = z.object({
