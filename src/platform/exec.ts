@@ -11,3 +11,9 @@ export const spawnExec: Exec = (argv, cwd, env) => {
     return { code: 127, stdout: "", stderr: (e as Error).message };
   }
 };
+
+// Runs nothing and reports success; the command goes to stderr so callers' own output stays intact.
+export const dryRunExec: Exec = (argv) => {
+  console.error(`would run: ${argv.join(" ")}`);
+  return { code: 0, stdout: "", stderr: "" };
+};

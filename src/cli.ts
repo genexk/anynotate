@@ -9,7 +9,7 @@ import { commandArgv, detectInstallKind, readInstallRecord } from "./agent/insta
 import { applyUninstall, planUninstall } from "./agent/uninstall";
 import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, stopBridge } from "./bridge/control";
 import { anynotateHome } from "./inbox/paths";
-import { spawnExec as platformExec } from "./platform/exec";
+import { dryRunExec, spawnExec as platformExec } from "./platform/exec";
 import { currentPlatform, installPaths } from "./platform/os";
 import { detectUserSystemd } from "./platform/service";
 import { runNativeHost } from "./agent/native-host";
@@ -48,6 +48,9 @@ async function nativeHost(argv: string[]): Promise<never> {
 if (isNativeHostInvocation(process.argv)) await nativeHost([callerOrigin(process.argv)!]);
 
 const [cmd, ...rest] = process.argv.slice(2);
+// Test-only: report external commands (service, registry, PATH, ACLs) instead of running them.
+const externalDryRun = process.env.ANYNOTATE_EXTERNAL_DRYRUN === "1";
+const exec = externalDryRun ? dryRunExec : platformExec;
 const repo = resolve(import.meta.dir, "..");
 
 switch (cmd) {
@@ -109,13 +112,12 @@ switch (cmd) {
       kind: detectInstallKind(),
       version: pkg.version,
       uid: process.getuid?.() ?? 0,
-      hasUserSystemd: platform === "linux" && detectUserSystemd(platformExec),
+      hasUserSystemd: platform === "linux" && detectUserSystemd(exec),
     });
-    const serviceDryRun = process.env.ANYNOTATE_SERVICE_DRYRUN === "1";
-    const log = applyInstall(steps, dry, { exec: platformExec, platform, serviceDryRun });
+    const log = applyInstall(steps, dry, { exec, platform, externalDryRun });
     for (const line of log) console.log(line);
-    if (log.some((l) => l.startsWith("failed (exit"))) {
-      console.error("anynotate install: the bridge service did not start (see above)");
+    if (log.some((l) => l.startsWith("failed ("))) {
+      console.error("anynotate install: some steps failed (see above)");
       process.exit(1);
     }
     break;
@@ -135,10 +137,9 @@ switch (cmd) {
       kind: detectInstallKind(),
       purge: rest.includes("--purge"),
       uid: process.getuid?.() ?? 0,
-      hasUserSystemd: platform === "linux" && detectUserSystemd(platformExec),
+      hasUserSystemd: platform === "linux" && detectUserSystemd(exec),
     });
-    const serviceDryRun = process.env.ANYNOTATE_SERVICE_DRYRUN === "1";
-    const log = applyUninstall(steps, platformExec, rest.includes("--dry-run"), { serviceDryRun });
+    const log = applyUninstall(steps, exec, rest.includes("--dry-run"), { externalDryRun });
     for (const line of log) console.log(line);
     process.exit(log.some((l) => l.startsWith("failed")) ? 1 : 0);
   }

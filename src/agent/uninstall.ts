@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, lstatSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, parse, resolve, sep } from "node:path";
 import type { Exec, ExecResult } from "../platform/exec";
-import { applyHostSteps, cmdArgv, type HostStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
+import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
 import { type Env, exeName, installPaths, pathFor, type Platform } from "../platform/os";
 import { planService, runSteps, tolerateNotRunning } from "../platform/service";
 import { HOOKED_CLIS, isAnynotateHook, removeHook } from "./install";
@@ -136,13 +136,13 @@ function purgeRefusal(dir: string, home: string): string | null {
 }
 
 export type UninstallApplyOptions = {
-  // Remove files but leave the service and the user PATH alone: those steps are only reported.
-  serviceDryRun?: boolean;
+  // Remove files but run no external command (service, registry, user PATH): those steps are only reported.
+  externalDryRun?: boolean;
   backupSuffix?: string;
 };
 
 export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boolean, o: UninstallApplyOptions = {}): string[] {
-  const { serviceDryRun = false, backupSuffix = ".bak-anynotate" } = o;
+  const { externalDryRun = false, backupSuffix = ".bak-anynotate" } = o;
   const log: string[] = [];
   let failed = false;
   let dataLine = "";
@@ -154,7 +154,7 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
     try {
       switch (s.action) {
         case "run": {
-          const r = runSteps(s.argv, exec, dryRun || serviceDryRun, tolerate);
+          const r = runSteps(s.argv, exec, dryRun || externalDryRun, tolerate);
           log.push(...r.log);
           if (!r.ok) failed = true;
           break;
@@ -191,7 +191,7 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
           break;
         }
         case "native-host":
-          log.push(...applyHostSteps([s.host], exec, dryRun));
+          log.push(...applyHostSteps([s.host], exec, dryRun || (externalDryRun && isRegistryStep(s.host))));
           break;
         case "remove-symlink": {
           const stat = lstatOrNull(s.path);
@@ -232,7 +232,7 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
           break;
         }
         case "remove-path-entry": {
-          if (dryRun || serviceDryRun) { log.push(`would remove ${s.path} from the user PATH`); break; }
+          if (dryRun || externalDryRun) { log.push(`would remove ${s.path} from the user PATH`); break; }
           const r = exec(["powershell", "-NoProfile", "-NonInteractive", "-Command", REMOVE_PATH_ENTRY], undefined, { ANYNOTATE_BIN_DIR: s.path });
           if (r.code === 0) log.push(`removed ${s.path} from the user PATH`);
           else fail(`failed (exit ${r.code}): removing ${s.path} from the user PATH${r.stderr.trim() ? `: ${r.stderr.trim()}` : ""}`);

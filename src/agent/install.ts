@@ -3,7 +3,7 @@ import { dirname, join, posix, resolve, win32 } from "node:path";
 import { addOrigin, ORIGIN_RE, readOrigins } from "../bridge/origins";
 import type { Exec } from "../platform/exec";
 import { makePrivateDir, writePrivateFile } from "../platform/files";
-import { applyHostSteps, cmdArgv, type HostStep, planNativeHost, sourceHostWrapper } from "../platform/nativehost";
+import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHost, sourceHostWrapper } from "../platform/nativehost";
 import { currentPlatform, type Env, installPaths, pathFor, type Platform } from "../platform/os";
 import { LAUNCHD_LABEL, planService, runSteps, type ServiceFile } from "../platform/service";
 import { commandArgv, formatInstallRecord, INSTALL_RECORD, type InstallKind, type InstallRecord, quoteArgv } from "./installkind";
@@ -233,8 +233,8 @@ const lstatOrNull = (path: string) => {
 export type ApplyOptions = {
   exec?: Exec;
   platform?: Platform;
-  // Write everything but leave the service alone: only `run` steps are reported instead of executed.
-  serviceDryRun?: boolean;
+  // Write files but run no external command (service, registry): those steps are only reported.
+  externalDryRun?: boolean;
   backupSuffix?: string;
 };
 
@@ -246,7 +246,7 @@ const encode = (content: string, encoding: InstallStep["encoding"]) =>
   encoding === "utf16le-bom" ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(content, "utf16le")]) : Buffer.from(content);
 
 export function applyInstall(steps: InstallStep[], dryRun: boolean, o: ApplyOptions = {}): string[] {
-  const { exec = noExec, platform = currentPlatform(), serviceDryRun = false, backupSuffix = ".bak-anynotate" } = o;
+  const { exec = noExec, platform = currentPlatform(), externalDryRun = false, backupSuffix = ".bak-anynotate" } = o;
   const log: string[] = [];
   // Parse every settings file before touching anything, so one unreadable file can't leave the
   // install half-applied; such a file is skipped and the rest still go ahead.
@@ -301,13 +301,18 @@ export function applyInstall(steps: InstallStep[], dryRun: boolean, o: ApplyOpti
       writeFileSync(s.path, `${JSON.stringify(config, null, 2)}\n`);
       log.push(`merged  ${what} → ${s.path}`);
     } else if (s.action === "native-host") {
-      if (s.host) log.push(...applyHostSteps([s.host], exec, dryRun));
+      if (!s.host) continue;
+      try {
+        log.push(...applyHostSteps([s.host], exec, dryRun || (externalDryRun && isRegistryStep(s.host))));
+      } catch (err) {
+        log.push(`failed (${(err as Error).message})`);
+      }
     } else if (s.action === "record") {
       if (dryRun) { log.push(`would write ${s.path}`); continue; }
       writePrivateFile(s.path, s.content, platform, exec);
       log.push(`wrote   ${s.path}`);
     } else if (s.action === "run") {
-      log.push(...runSteps(s.argv ?? [], exec, dryRun || serviceDryRun).log);
+      log.push(...runSteps(s.argv ?? [], exec, dryRun || externalDryRun).log);
     } else if (s.action === "write") {
       const mode = s.mode;
       const bytes = encode(s.content, s.encoding);

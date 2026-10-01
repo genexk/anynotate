@@ -70,6 +70,8 @@ export function sourceHostWrapper(platform: Platform, bun: string, repo: string,
   return { path: posix.join(dataDir, "native-host"), content: `#!/bin/sh\nexec "${bun}" "${posix.join(repo, "src/cli.ts")}" native-host "$@"\n` };
 }
 
+export const isRegistryStep = (h: HostStep) => h.kind === "reg-add" || h.kind === "reg-delete";
+
 const missingKey = (out: string) => /unable to find/i.test(out);
 
 function reg(exec: Exec, argv: string[], okIfMissing = false) {

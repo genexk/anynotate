@@ -93,7 +93,16 @@ test("retention <days> mentions the env override only when the env value is non-
 const CLI = join(import.meta.dir, "../src/cli.ts");
 const run = async (args: string[], env: Record<string, string> = {}) => {
   const proc = Bun.spawn([process.execPath, CLI, ...args], {
-    env: { ...process.env, ANYNOTATE_HOME: join(home, "data"), HOME: home, USERPROFILE: home, ...env },
+    env: {
+      ...process.env,
+      ANYNOTATE_HOME: join(home, "data"),
+      HOME: home,
+      USERPROFILE: home,
+      LOCALAPPDATA: join(home, "AppData", "Local"),
+      XDG_CONFIG_HOME: join(home, ".config"),
+      ANYNOTATE_EXTERNAL_DRYRUN: "1",
+      ...env,
+    },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -111,8 +120,8 @@ test("install --dry-run lists the service start and prints no launchctl hints", 
   expect(existsSync(join(home, "data"))).toBe(false);
 });
 
-test("install records the install kind and writes the service without starting it under ANYNOTATE_SERVICE_DRYRUN", async () => {
-  const r = await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+test("install records the install kind and writes the service without starting it under ANYNOTATE_EXTERNAL_DRYRUN", async () => {
+  const r = await run(["install"]);
   expect(r.code).toBe(0);
   const record = JSON.parse(readFileSync(join(home, "data", "install.json"), "utf8"));
   expect(record).toMatchObject({ kind: "source", path: join(import.meta.dir, ".."), version: pkg.version, platform: process.platform });
@@ -121,7 +130,7 @@ test("install records the install kind and writes the service without starting i
 });
 
 test("uninstall --dry-run lists the removals and changes nothing", async () => {
-  await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+  await run(["install"]);
   const r = await run(["uninstall", "--dry-run", "--purge"]);
   expect(r.code).toBe(0);
   expect(r.out).toContain(`would remove ${join(home, "data", "install.json")}`);
@@ -129,10 +138,9 @@ test("uninstall --dry-run lists the removals and changes nothing", async () => {
   expect(existsSync(join(home, "data", "install.json"))).toBe(true);
 });
 
-// Not on Windows: the native-host step deletes real HKCU registry keys there.
-test.skipIf(process.platform === "win32")("uninstall removes what install wrote and keeps the data dir", async () => {
-  await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
-  const r = await run(["uninstall"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+test("uninstall removes what install wrote and keeps the data dir", async () => {
+  await run(["install"]);
+  const r = await run(["uninstall"]);
   expect(r.code).toBe(0);
   expect(existsSync(join(home, "data", "install.json"))).toBe(false);
   expect(existsSync(join(home, "data"))).toBe(true);

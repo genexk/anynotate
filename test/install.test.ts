@@ -513,8 +513,8 @@ test("a linux install with user systemd writes the unit and enables it", () => {
   expect(existsSync(join(home, ".config/google-chrome/NativeMessagingHosts/dev.anynotate.host.json"))).toBe(true);
 });
 
-test("serviceDryRun writes the files but starts nothing", () => {
-  const log = applyInstall(plan(), false, { exec: fakeExec, platform: "darwin", serviceDryRun: true });
+test("externalDryRun writes the files but starts nothing", () => {
+  const log = applyInstall(plan(), false, { exec: fakeExec, platform: "darwin", externalDryRun: true });
   expect(calls).toEqual([]);
   expect(log).toContain("would run: launchctl kickstart -k gui/501/dev.anynotate.bridge");
   expect(existsSync(join(home, ".anynotate/install.json"))).toBe(true);
@@ -530,4 +530,21 @@ test("a utf16le-bom file is written with a BOM and compared byte for byte", () =
 
 test("without an exec, applying a plan refuses to run commands rather than touching the real service", () => {
   expect(() => applyInstall(plan(), false, { platform: "darwin" })).toThrow(/no exec/);
+});
+
+const regStep = (): InstallStep => ({ path: "HKCU\\Software\\X", action: "native-host", content: "", host: { kind: "reg-add", key: "HKCU\\Software\\X", manifestPath: "C:\\m.json" } });
+
+test("a failing reg add is logged as failed instead of throwing", () => {
+  const denied: Exec = () => ({ code: 1, stdout: "", stderr: "Access is denied." });
+  const log = applyInstall([regStep()], false, { exec: denied, platform: "win32" });
+  expect(log).toHaveLength(1);
+  expect(log[0]).toStartWith("failed (reg add HKCU\\Software\\X");
+  expect(log[0]).toContain("Access is denied.");
+});
+
+test("externalDryRun reports registry steps without running them", () => {
+  expect(applyInstall([regStep()], false, { exec: fakeExec, platform: "win32", externalDryRun: true })).toEqual([
+    "would register HKCU\\Software\\X → C:\\m.json",
+  ]);
+  expect(calls).toEqual([]);
 });
