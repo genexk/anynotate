@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeMessage, encodeMessage } from "../src/agent/native-host";
 import type { Exec, ExecResult } from "../src/platform/exec";
+import { cliArgv } from "./fixtures/spawn";
 import {
   applyHostSteps,
   HOST_NAME,
@@ -210,13 +211,12 @@ test("the Windows wrapper escapes % in paths so cmd does not expand them", () =>
   );
 });
 
-const bin = join(import.meta.dir, "../bin/anynotate");
 
 test("the CLI answers as a native host when Chrome passes the origin first", async () => {
   const home = mkdtempSync(join(tmpdir(), "anynotate-"));
   try {
     writeFileSync(join(home, "origins"), `chrome-extension://${ID}\n`);
-    const proc = Bun.spawn([bin, ORIGIN, "--parent-window=0"], {
+    const proc = Bun.spawn(cliArgv(ORIGIN, "--parent-window=0"), {
       stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
     });
     proc.stdin.write(encodeMessage({ type: "token" }));
@@ -234,7 +234,7 @@ test("the CLI refuses a disallowed origin and creates no token", async () => {
   try {
     writeFileSync(join(home, "origins"), `chrome-extension://${ID}\n`);
     const other = "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/";
-    const proc = Bun.spawn([bin, other, "--parent-window=0"], {
+    const proc = Bun.spawn(cliArgv(other, "--parent-window=0"), {
       stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
     });
     proc.stdin.write(encodeMessage({ type: "token" }));

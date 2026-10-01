@@ -131,6 +131,6 @@ test("spawnExec reports a missing binary as exit 127 instead of throwing", () =>
 });
 
 test("spawnExec returns the exit code and output of a real command", () => {
-  const r = spawnExec(["sh", "-c", "echo hi; echo oops >&2; exit 3"]);
+  const r = spawnExec([process.execPath, "-e", "console.log('hi'); console.error('oops'); process.exit(3)"]);
   expect(r).toEqual({ code: 3, stdout: "hi\n", stderr: "oops\n" });
 });

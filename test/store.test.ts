@@ -61,7 +61,7 @@ test("writeBundle writes an atomic folder with queued status", async () => {
   expect(readStatus(b.id)!.state).toBe("queued");
   expect(b.files).toEqual({ page: "page.md", screenshot: "screenshot.png" });
   expect(readdirSync(join(home, "inbox")).some((n) => n.startsWith(".tmp-"))).toBe(false);
-  expect(statSync(join(home, "inbox")).mode & 0o777).toBe(0o700);
+  if (process.platform !== "win32") expect(statSync(join(home, "inbox")).mode & 0o777).toBe(0o700);
 });
 
 test("README names only the crops that were uploaded", async () => {

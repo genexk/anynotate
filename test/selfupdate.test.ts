@@ -147,7 +147,7 @@ test("newer release: binary replaced, reinstalled once from the new binary, vers
   expect(r.err).toEqual([]);
   expect(r.code).toBe(0);
   expect(readFileSync(exe, "utf8")).toBe("new binary");
-  expect(statSync(exe).mode & 0o777).toBe(0o755);
+  if (process.platform !== "win32") expect(statSync(exe).mode & 0o777).toBe(0o755);
   expect(existsSync(`${exe}.new`)).toBe(false);
   expect(r.reinstalls).toEqual([exe]);
   expect(r.stops).toBe(0);
@@ -329,7 +329,8 @@ test("a malformed SHA256SUMS line for the asset fails the update", async () => {
   expect(readFileSync(exe, "utf8")).toBe("old binary");
 });
 
-test("a symlink planted at exe.new is replaced, not followed", async () => {
+// A file symlink needs a privilege on Windows, so the planted link is a POSIX attack.
+test.skipIf(process.platform === "win32")("a symlink planted at exe.new is replaced, not followed", async () => {
   const victim = join(dir, "victim");
   writeFileSync(victim, "keep me");
   symlinkSync(victim, `${exe}.new`);

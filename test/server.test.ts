@@ -173,7 +173,7 @@ test("POST /bundles answers after routeWaitMs while slow routing finishes in the
 test("loadOrCreateToken creates a 0600 token once and reuses it", () => {
   const t = loadOrCreateToken();
   expect(t).toMatch(/^[0-9a-f]{64}$/);
-  expect(statSync(join(home, "token")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(home, "token")).mode & 0o777).toBe(0o600);
   expect(loadOrCreateToken()).toBe(t);
 });
 
@@ -183,7 +183,7 @@ test("loadOrCreateToken replaces an empty or malformed token file", () => {
     const t = loadOrCreateToken();
     expect(t).toMatch(/^[0-9a-f]{64}$/);
     expect(readFileSync(join(home, "token"), "utf8").trim()).toBe(t);
-    expect(statSync(join(home, "token")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(home, "token")).mode & 0o777).toBe(0o600);
   }
 });
 

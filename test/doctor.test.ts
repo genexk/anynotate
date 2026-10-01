@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { type Check, type DoctorOptions, formatChecks, runDoctor } from "../src/agent/doctor";
 import type { Exec } from "../src/platform/exec";
+import { cliArgv } from "./fixtures/spawn";
 import { browserConfigRoot, browserRegistryKey } from "../src/platform/os";
 
 const HEALTH = { bridgeVersion: "0.4.0", protocol: { version: 2 } };
@@ -225,7 +226,7 @@ beforeEach(() => { home = mkdtempSync(join(tmpdir(), "anynotate-doctor-")); });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 const cli = async (args: string[]) => {
-  const proc = Bun.spawn([process.execPath, join(import.meta.dir, "../src/cli.ts"), ...args], {
+  const proc = Bun.spawn(cliArgv(...args), {
     env: {
       ...process.env,
       ANYNOTATE_HOME: join(home, "data"),

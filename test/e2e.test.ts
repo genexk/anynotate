@@ -7,22 +7,23 @@ import { cliArgv, writeHerdrShim } from "./fixtures/spawn";
 
 let home: string, bridge: ReturnType<typeof Bun.spawn> | undefined, base: string, token: string, shimLog: string, promptHookOut: string;
 
-// Resolves once the bridge prints its "listening" line, or with false if it exits first (e.g. port taken).
-async function waitForListening(proc: ReturnType<typeof Bun.spawn>): Promise<boolean> {
+// Resolves with the port from the bridge's "listening" line, or null if it exits or stays silent first.
+async function waitForListening(proc: ReturnType<typeof Bun.spawn>): Promise<number | null> {
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
   let seen = "";
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const chunk = await Promise.race([reader.read(), Bun.sleep(deadline - Date.now()).then(() => null)]);
     if (!chunk || chunk.done) break;
     seen += decoder.decode(chunk.value, { stream: true });
-    if (seen.includes("anynotate bridge on http://127.0.0.1:")) {
+    const port = /anynotate bridge on http:\/\/127\.0\.0\.1:(\d+)/.exec(seen)?.[1];
+    if (port) {
       reader.releaseLock();
-      return true;
+      return Number(port);
     }
   }
-  return false;
+  return null;
 }
 
 beforeAll(async () => {
@@ -34,17 +35,16 @@ beforeAll(async () => {
   const list = join(home, "list.json");
   writeFileSync(list, JSON.stringify({ result: { agents: [{ agent: "gemini", agent_status: "idle", cwd: "/g", pane_id: "w2:p1", terminal_title_stripped: "gem" }] } }));
 
-  for (let attempt = 0; attempt < 5 && !bridge; attempt++) {
-    const port = 47000 + Math.floor(Math.random() * 900);
-    const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: String(port), ANYNOTATE_HERDR: herdr, HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
-    const proc = Bun.spawn(cliArgv("bridge"), { env, stdout: "pipe", stderr: "inherit" });
-    if (await waitForListening(proc)) {
-      bridge = proc;
-      base = `http://127.0.0.1:${port}`;
-    } else {
-      proc.kill();
-      await proc.exited;
-    }
+  // Port 0 lets the OS pick a free port, so no fixed range can collide with a reserved one (Windows reserves some).
+  const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: "0", ANYNOTATE_HERDR: herdr, HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
+  const proc = Bun.spawn(cliArgv("bridge"), { env, stdout: "pipe", stderr: "inherit" });
+  const port = await waitForListening(proc);
+  if (port) {
+    bridge = proc;
+    base = `http://127.0.0.1:${port}`;
+  } else {
+    proc.kill();
+    await proc.exited;
   }
   if (!bridge) throw new Error("anynotate bridge did not start");
   expect((await fetch(`${base}/health`)).ok).toBe(true);

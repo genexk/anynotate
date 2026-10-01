@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -106,7 +106,7 @@ test("non-bundle dirs, files and symlinks pointing outside the inbox are never t
     mkdirSync(target);
     writeFileSync(join(target, "keep.txt"), "x");
     bundle("anchor", daysAgo(1));
-    symlinkSync(target, join(inbox(), "2020-01-01T000000-victim"));
+    symlinkSync(target, join(inbox(), "2020-01-01T000000-victim"), process.platform === "win32" ? "junction" : undefined);
     mkdirSync(join(inbox(), "notes"));
     writeFileSync(join(inbox(), "notes", "status.json"), JSON.stringify({ state: "delivered", at: daysAgo(400).toISOString() }));
     mkdirSync(join(inbox(), ".tmp-2020-01-01T000000-x-1-abc"));
@@ -114,7 +114,8 @@ test("non-bundle dirs, files and symlinks pointing outside the inbox are never t
     expect(pruneBundles(1, { now: NOW }).pruned).toEqual([]);
     expect(existsSync(join(target, "keep.txt"))).toBe(true);
     expect(existsSync(join(inbox(), "notes", "status.json"))).toBe(true);
-    expect(readlinkSync(join(inbox(), "2020-01-01T000000-victim"))).toBe(target);
+    expect(lstatSync(join(inbox(), "2020-01-01T000000-victim")).isSymbolicLink()).toBe(true);
+    if (process.platform !== "win32") expect(readlinkSync(join(inbox(), "2020-01-01T000000-victim"))).toBe(target);
     expect(existsSync(join(inbox(), ".tmp-2020-01-01T000000-x-1-abc"))).toBe(true);
     expect(existsSync(join(inbox(), "2020-01-01T000000-file"))).toBe(true);
   } finally {

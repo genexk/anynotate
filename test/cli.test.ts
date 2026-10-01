@@ -180,7 +180,7 @@ const freePort = () => {
   return String(port);
 };
 
-test.skipIf(process.platform === "win32")("bridge --detach starts a bridge with a pid file; --status and --stop control it", async () => {
+test("bridge --detach starts a bridge with a pid file; --status and --stop control it", async () => {
   const env = { ANYNOTATE_PORT: freePort() };
   const pidFile = join(home, "data", "bridge.pid");
   try {

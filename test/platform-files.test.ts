@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Exec } from "../src/platform/exec";
@@ -164,4 +165,80 @@ test("clearLatest removes the link and the id file", () => {
   clearLatest(dir);
   expect(readLatest(dir)).toBeNull();
   expect(readdirSync(dir)).toEqual([]);
+});
+
+const quietly = <T>(fn: () => T): T => {
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    return fn();
+  } finally {
+    console.error = orig;
+  }
+};
+const isLinkAt = (p: string) => {
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+// An absolute directory link: a junction on Windows, which needs no privilege, a symlink elsewhere.
+const dirLink = (target: string, path: string) => symlinkSync(target, path, posixHost ? undefined : "junction");
+
+test("a failed link update removes the stale latest link, so the id file wins", () => {
+  mkdirSync(join(dir, ID));
+  mkdirSync(join(dir, OTHER));
+  writeLatest(dir, ID);
+  expect(isLinkAt(join(dir, "latest"))).toBe(true);
+  const spy = spyOn(fs, "symlinkSync").mockImplementation(() => {
+    throw new Error("EPERM");
+  });
+  try {
+    quietly(() => writeLatest(dir, OTHER));
+  } finally {
+    spy.mockRestore();
+  }
+  expect(isLinkAt(join(dir, "latest"))).toBe(false);
+  expect(readLatest(dir)).toBe(OTHER);
+  expect(existsSync(join(dir, ID))).toBe(true);
+});
+
+test("a latest link aimed outside the inbox counts only by its name, and only if the inbox has that bundle", () => {
+  const outside = mkdtempSync(join(tmpdir(), "anynotate-outside-"));
+  try {
+    mkdirSync(join(outside, OTHER));
+    writeFileSync(join(dir, LATEST_ID_FILE), `${ID}\n`);
+    dirLink(join(outside, OTHER), join(dir, "latest"));
+    expect(readLatest(dir)).toBe(ID);
+    mkdirSync(join(dir, OTHER));
+    expect(readLatest(dir)).toBe(OTHER);
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test.skipIf(!posixHost)("a relative latest link that climbs out of the inbox counts only by its name", () => {
+  mkdirSync(join(dir, "inbox"));
+  mkdirSync(join(dir, OTHER));
+  symlinkSync(join("..", OTHER), join(dir, "inbox", "latest"));
+  expect(readLatest(join(dir, "inbox"))).toBeNull();
+  mkdirSync(join(dir, "inbox", OTHER));
+  expect(readLatest(join(dir, "inbox"))).toBe(OTHER);
+});
+
+test.skipIf(posixHost)("on Windows latest is a junction that clearLatest removes without touching the bundle", () => {
+  mkdirSync(join(dir, ID));
+  writeFileSync(join(dir, ID, "README.md"), "notes\n");
+  writeLatest(dir, ID);
+  expect(lstatSync(join(dir, "latest")).isSymbolicLink()).toBe(true);
+  expect(readFileSync(join(dir, "latest", "README.md"), "utf8")).toBe("notes\n");
+  expect(readLatest(dir)).toBe(ID);
+  mkdirSync(join(dir, OTHER));
+  writeLatest(dir, OTHER);
+  expect(readLatest(dir)).toBe(OTHER);
+  clearLatest(dir);
+  expect(isLinkAt(join(dir, "latest"))).toBe(false);
+  expect(readFileSync(join(dir, ID, "README.md"), "utf8")).toBe("notes\n");
+  expect(readdirSync(dir).sort()).toEqual([ID, OTHER].sort());
 });
