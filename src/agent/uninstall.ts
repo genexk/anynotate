@@ -2,6 +2,7 @@ import { type BigIntStats, copyFileSync, existsSync, lstatSync, readdirSync, rea
 import { basename, dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import type { Exec, ExecResult } from "../platform/exec";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHostRemoval, sourceHostWrapper } from "../platform/nativehost";
+import { LATEST, removeLink } from "../platform/latest";
 import { type Env, exeName, installPaths, pathFor, type Platform } from "../platform/os";
 import { planService, runSteps, tolerateNotRunning } from "../platform/service";
 import { REMOVE_PATH_ENTRY, runPathEntry } from "../platform/userpath";
@@ -293,6 +294,8 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
             break;
           }
           if (dryRun) { log.push(`would delete ${s.path}`); break; }
+          // inbox/latest is a junction on Windows: unlink it first so the recursive delete never walks through it.
+          removeLink(join(s.path, "inbox", LATEST));
           rmSync(s.path, { recursive: true, force: true });
           log.push(`deleted ${s.path}`);
           dataLine = `Anynotate removed, including ${s.path}.`;

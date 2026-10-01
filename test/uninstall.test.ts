@@ -411,6 +411,18 @@ test("--purge deletes an ordinary data dir holding a token, on any host", () => 
   expect(log.at(-1)).toBe(`Anynotate removed, including ${data}.`);
 });
 
+test("--purge deletes a data dir whose inbox/latest links a bundle, on any host", () => {
+  const data = join(home, ".anynotate");
+  const bundle = join(data, "inbox", "2026-10-01T120000-abcd");
+  mkdirSync(bundle, { recursive: true });
+  writeFileSync(join(bundle, "README.md"), "notes\n");
+  writeFileSync(join(data, "token"), "secret\n");
+  dirLink(bundle, join(data, "inbox", "latest"));
+  const log = applyUninstall(plan({ purge: true }), fakeExec, false);
+  expect(log.filter((l) => l.startsWith("failed") || l.startsWith("refused"))).toEqual([]);
+  expect(existsSync(data)).toBe(false);
+});
+
 windowsOnly("on Windows, uninstall reverses a source install and --purge deletes the data dir", () => {
   const env = { LOCALAPPDATA: win32.join(home, "AppData", "Local") };
   const kind: InstallKind = { kind: "source", repo: process.cwd(), bun: process.execPath };
