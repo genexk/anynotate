@@ -361,6 +361,31 @@ describe("install.ps1", () => {
     expect(code).toContain("emulation");
   });
 
+  test("accepts only https:// or file:// base URLs, and only https:// where redirects end", () => {
+    const code = src();
+    expect(code).toContain("[Uri]::TryCreate($base, [UriKind]::Absolute, [ref]$baseUri)");
+    expect(code).toContain("$baseUri.Scheme -ne 'https' -and $baseUri.Scheme -ne 'file'");
+    expect(code).toContain("-OutFile $dest -PassThru");
+    expect(code).toContain("$resp.BaseResponse.ResponseUri");
+    expect(code).toContain("$resp.BaseResponse.RequestMessage.RequestUri");
+    expect(code).toMatch(/if \(-not \$final -or \$final\.Scheme -ne 'https'\) \{\s*Remove-Item -LiteralPath \$dest[^\n]*\n\s*throw/);
+  });
+
+  test.skipIf(!pwsh || process.platform !== "win32")("refuses an http:// base URL before downloading", () => {
+    const binDir = mkdtempSync(join(tmpdir(), "anynotate-ps1-"));
+    try {
+      const r = spawnSync(pwsh ?? "pwsh", ["-NoProfile", "-File", installPs1], {
+        encoding: "utf8",
+        env: { ...process.env, ANYNOTATE_BASE_URL: "http://example.com/release", ANYNOTATE_BIN_DIR: join(binDir, "bin") },
+      });
+      expect(r.status).not.toBe(0);
+      expect(`${r.stdout}${r.stderr}`).toContain("ANYNOTATE_BASE_URL must start with https://");
+      expect(existsSync(join(binDir, "bin"))).toBe(false);
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
   test.skipIf(!pwsh)("parses with the PowerShell parser", () => {
     const cmd = `$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${installPs1}',[ref]$t,[ref]$e);if($e.Count){$e|%{$_.ToString()};exit 1}`;
     const r = spawnSync(pwsh ?? "pwsh", ["-NoProfile", "-Command", cmd], { encoding: "utf8" });

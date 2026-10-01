@@ -51,6 +51,10 @@ function Install-Anynotate {
     }
   }
   $base = $base.TrimEnd('/')
+  $baseUri = $null
+  if (-not [Uri]::TryCreate($base, [UriKind]::Absolute, [ref]$baseUri) -or ($baseUri.Scheme -ne 'https' -and $baseUri.Scheme -ne 'file')) {
+    throw "anynotate installer: ANYNOTATE_BASE_URL must start with https:// (or file:// for a local release); got $base"
+  }
 
   $binDir = $env:ANYNOTATE_BIN_DIR
   if (-not $binDir) {
@@ -80,7 +84,18 @@ function Install-Anynotate {
     if ($uri.IsFile) {
       Copy-Item -LiteralPath $uri.LocalPath -Destination $dest -Force
     } else {
-      Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+      $resp = Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest -PassThru
+      # Where redirects ended: ResponseUri in Windows PowerShell 5.1, RequestMessage.RequestUri in PowerShell 7.
+      $final = $null
+      if ($resp.BaseResponse.PSObject.Properties['ResponseUri']) {
+        $final = $resp.BaseResponse.ResponseUri
+      } elseif ($resp.BaseResponse.RequestMessage) {
+        $final = $resp.BaseResponse.RequestMessage.RequestUri
+      }
+      if (-not $final -or $final.Scheme -ne 'https') {
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+        throw "anynotate installer: $url ended at a non-https URL ($final); refusing it."
+      }
     }
   }
 
