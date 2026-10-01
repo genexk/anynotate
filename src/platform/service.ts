@@ -42,6 +42,7 @@ const xdgConfigHome = (home: string, env: Env) => {
   return v && posix.isAbsolute(v) ? v : posix.join(home, ".config");
 };
 
+// launchd starts agents with a bare PATH; Homebrew's bin on Apple silicon holds tools the bridge drives, such as herdr.
 function launchd(o: ServiceOptions): ServicePlan {
   const path = posix.join(o.home, "Library", "LaunchAgents", `${LAUNCHD_LABEL}.plist`);
   const args = [...o.exe, "bridge"].map((a) => `    <string>${xml(a)}</string>`).join("\n");
@@ -57,7 +58,7 @@ ${args}
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>${xml(`${posix.dirname(o.exe[0]!)}:/usr/local/bin:/usr/bin:/bin`)}</string></dict>
+  <dict><key>PATH</key><string>${xml(`${posix.dirname(o.exe[0]!)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`)}</string></dict>
   <key>StandardOutPath</key><string>${xml(o.logPath)}</string>
   <key>StandardErrorPath</key><string>${xml(o.logPath)}</string>
 </dict>

@@ -42,7 +42,7 @@ test("darwin: a LaunchAgent plist and launchctl bootstrap", () => {
   expect(c).toContain("<key>KeepAlive</key><true/>");
   expect(c).toContain("<key>StandardOutPath</key><string>/Users/me/.anynotate/bridge.log</string>");
   expect(c).toContain("<key>StandardErrorPath</key><string>/Users/me/.anynotate/bridge.log</string>");
-  expect(c).toContain("<key>PATH</key><string>/Users/me/.local/bin:/usr/local/bin:/usr/bin:/bin</string>");
+  expect(c).toContain("<key>PATH</key><string>/Users/me/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>");
   expect(plan.start).toEqual([
     ["launchctl", "bootout", "gui/501/dev.anynotate.bridge"],
     ["launchctl", "bootstrap", "gui/501", plist],
@@ -57,7 +57,7 @@ test("darwin: a source install runs bun with cli.ts, and values are XML-escaped"
   const plan = planService({ ...base, platform: "darwin", home: "/Users/me", exe: ["/opt/bun/bin/bun", "/src/R&D <x>/cli.ts"] });
   const c = plan.files[0]!.content;
   expect(c).toContain("<string>/opt/bun/bin/bun</string>\n    <string>/src/R&amp;D &lt;x&gt;/cli.ts</string>\n    <string>bridge</string>");
-  expect(c).toContain("<string>/opt/bun/bin:/usr/local/bin:/usr/bin:/bin</string>");
+  expect(c).toContain("<string>/opt/bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>");
   expect(c).not.toContain("R&D");
 });
 
