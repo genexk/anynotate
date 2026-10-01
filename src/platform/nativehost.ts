@@ -5,8 +5,9 @@ import { BROWSERS, browserConfigRoot, browserRegistryKey, type Env, type Platfor
 
 export const HOST_NAME = "dev.anynotate.host";
 
-// Chrome launches a host as `<host> <origin>` (plus `--parent-window=N` on Windows). Under bun the
-// script path sits in between, so the origin is argv[1] for the compiled binary and argv[2] for bun.
+// Chrome launches a host as `<host> <origin>` (plus `--parent-window=N` on Windows). Bun's argv always starts with
+// the runtime and the entry point, under bun ["bun", "/…/cli.ts", origin] and compiled ["bun", "/$bunfs/root/…",
+// origin], so the origin is argv[2]; argv[1] is accepted too, for a runtime that reports no entry point.
 export function isNativeHostInvocation(argv: string[]): boolean {
   return argv.slice(1).some((a, i) => i < 2 && a.startsWith("chrome-extension://"));
 }
