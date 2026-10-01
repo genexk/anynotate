@@ -66,6 +66,10 @@ resolve_base() {
     fi
   fi
   base=${base%/}
+  case "$base" in
+    https://* | file://*) ;;
+    *) fail "ANYNOTATE_BASE_URL must start with https:// (or file:// for a local release); got $base" ;;
+  esac
 }
 
 resolve_bin_dir() {
@@ -91,7 +95,17 @@ download() {
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL --proto '=https,file' --proto-redir '=https' -o "$2" "$1" || fail "download failed: $1"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$2" "$1" || fail "download failed: $1"
+    case "$1" in
+      file://*) cp "${1#file://}" "$2" || fail "copy failed: $1" ;;
+      *)
+        # GNU wget can refuse to follow a redirect to plain http; BusyBox wget has no such option.
+        if wget --help 2>&1 | grep -q -- '--https-only'; then
+          wget -q --https-only -O "$2" "$1" || fail "download failed: $1"
+        else
+          wget -q -O "$2" "$1" || fail "download failed: $1"
+        fi
+        ;;
+    esac
   else
     fail "neither curl nor wget is installed."
   fi

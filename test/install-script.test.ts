@@ -145,6 +145,73 @@ describe.skipIf(!posix)("install.sh", () => {
     expect(code).toContain("--proto-redir '=https'");
   });
 
+  test("refuses a base URL that is not https:// or file:// before downloading anything", () => {
+    writeFileSync(join(fakebin, "curl"), `#!/bin/sh\necho "$*" >> "${tmp}/urls"\nexit 22\n`);
+    chmodSync(join(fakebin, "curl"), 0o755);
+    for (const base of ["http://example.com/release", "ftp://example.com/release", "example.com/release"]) {
+      const r = run({ ANYNOTATE_BASE_URL: base });
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("ANYNOTATE_BASE_URL must start with https://");
+    }
+    expect(existsSync(join(tmp, "urls"))).toBe(false);
+    expect(existsSync(binDir)).toBe(false);
+  });
+
+  // A PATH holding every tool the host has except curl, so the script falls back to the fake wget.
+  function pathWithoutCurl(): string {
+    const dir = join(tmp, "nocurl");
+    mkdirSync(dir);
+    for (const d of (process.env.PATH ?? "").split(":")) {
+      let names: string[] = [];
+      try {
+        names = readdirSync(d);
+      } catch {
+        continue;
+      }
+      for (const n of names) {
+        if (n === "curl" || n === "wget" || existsSync(join(dir, n))) continue;
+        try {
+          symlinkSync(join(d, n), join(dir, n));
+        } catch {}
+      }
+    }
+    return `${fakebin}:${dir}`;
+  }
+
+  function fakeWget(help: string) {
+    writeFileSync(
+      join(fakebin, "wget"),
+      `#!/bin/sh\nif [ "$1" = --help ]; then echo "${help}"; exit 0; fi\necho "$*" >> "${tmp}/wget"\nexit 4\n`,
+    );
+    chmodSync(join(fakebin, "wget"), 0o755);
+  }
+
+  test.skipIf(!posix)("without curl, GNU wget downloads with --https-only", () => {
+    fakeWget("  --https-only  only follow secure HTTPS links");
+    const r = run({ ANYNOTATE_BASE_URL: "https://example.com/release" }, "sh", pathWithoutCurl());
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("download failed: https://example.com/release/");
+    expect(readFileSync(join(tmp, "wget"), "utf8")).toContain("-q --https-only -O ");
+  });
+
+  test.skipIf(!posix)("without curl, a wget lacking --https-only (BusyBox) still downloads", () => {
+    fakeWget("BusyBox v1.36 multi-call binary");
+    const r = run({ ANYNOTATE_BASE_URL: "https://example.com/release" }, "sh", pathWithoutCurl());
+    expect(r.code).not.toBe(0);
+    const args = readFileSync(join(tmp, "wget"), "utf8");
+    expect(args).toContain("-q -O ");
+    expect(args).not.toContain("--https-only");
+  });
+
+  test.skipIf(!posix)("without curl, a file:// release is copied rather than fetched", () => {
+    fakeWget("  --https-only");
+    publish("anynotate-linux-x64");
+    const r = run({}, "sh", pathWithoutCurl());
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(binDir, "anynotate"), "utf8")).toBe(STUB);
+    expect(existsSync(join(tmp, "wget"))).toBe(false);
+  });
+
   test("replaces an existing install", () => {
     mkdirSync(binDir);
     writeFileSync(join(binDir, "anynotate"), "old");
