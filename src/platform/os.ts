@@ -11,7 +11,7 @@ export function currentPlatform(p: string = process.platform): Platform {
 export const exeName = (p: Platform) => (p === "win32" ? "anynotate.exe" : "anynotate");
 
 // Paths are built with the target platform's separator regardless of the host, so callers and tests are host-independent.
-const pathFor = (p: Platform) => (p === "win32" ? win32 : posix);
+export const pathFor = (p: Platform) => (p === "win32" ? win32 : posix);
 
 const localAppData = (home: string, env: Env) => env.LOCALAPPDATA ?? win32.join(home, "AppData", "Local");
 

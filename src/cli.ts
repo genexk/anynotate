@@ -1,9 +1,16 @@
 import { readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import pkg from "../package.json";
 import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
+import { commandArgv, detectInstallKind } from "./agent/installkind";
+import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, stopBridge } from "./bridge/control";
+import { anynotateHome } from "./inbox/paths";
+import { spawnExec as platformExec } from "./platform/exec";
+import { currentPlatform } from "./platform/os";
+import { detectUserSystemd } from "./platform/service";
 import { runNativeHost } from "./agent/native-host";
 import { callerOrigin, isNativeHostInvocation } from "./platform/nativehost";
 import { runUpdate, spawnExec } from "./agent/update";
@@ -44,10 +51,21 @@ const repo = resolve(import.meta.dir, "..");
 
 switch (cmd) {
   case "bridge": {
+    const control: Control = {
+      dataDir: anynotateHome(),
+      logPath: join(anynotateHome(), "bridge.log"),
+      port: bridgePort(),
+      log: (line) => console.log(line),
+      err: (line) => console.error(line),
+    };
+    if (rest.includes("--detach")) process.exit(await detachBridge(control, [...commandArgv(detectInstallKind()), "bridge", "--pid-file"]));
+    if (rest.includes("--stop")) process.exit(await stopBridge(control));
+    if (rest.includes("--status")) process.exit(await bridgeStatus(control));
     const token = loadOrCreateToken();
     const fromEnv = (process.env.ANYNOTATE_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter((s) => ORIGIN_RE.test(s));
     const origins = [...new Set([...fromEnv, ...readOrigins()])];
-    const { server } = createBridge({ token, port: Number(process.env.ANYNOTATE_PORT ?? 47291), allowedOrigins: origins });
+    const { server } = createBridge({ token, port: control.port, allowedOrigins: origins });
+    if (rest.includes("--pid-file")) claimPidFile(control.dataDir);
     const sweep = () => {
       try {
         for (const id of archiveOlderThan(30)) console.log(`archived ${id}`);
@@ -82,13 +100,22 @@ switch (cmd) {
     break;
   case "install": {
     const dry = rest.includes("--dry-run");
-    const steps = planInstall({ home: homedir(), anynotateBin: join(repo, "bin/anynotate"), repo });
-    const log = applyInstall(steps, dry);
+    const platform = currentPlatform();
+    const steps = planInstall({
+      platform,
+      home: homedir(),
+      env: process.env,
+      kind: detectInstallKind(),
+      version: pkg.version,
+      uid: process.getuid?.() ?? 0,
+      hasUserSystemd: platform === "linux" && detectUserSystemd(platformExec),
+    });
+    const serviceDryRun = process.env.ANYNOTATE_SERVICE_DRYRUN === "1";
+    const log = applyInstall(steps, dry, { exec: platformExec, platform, serviceDryRun });
     for (const line of log) console.log(line);
-    const hints = !dry && !rest.includes("--no-hints");
-    if (hints) console.log("Next: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.anynotate.bridge.plist");
-    if (hints && log.some((l) => l.startsWith("added   origin"))) {
-      console.log("If the bridge was already running: launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge");
+    if (log.some((l) => l.startsWith("failed (exit"))) {
+      console.error("anynotate install: the bridge service did not start (see above)");
+      process.exit(1);
     }
     break;
   }
@@ -148,8 +175,7 @@ switch (cmd) {
       }
       if (sub === "add" && value) {
         console.log(addOrigin(value).added ? `added ${value}` : `already present ${value}`);
-        console.log("Restart the bridge: launchctl kickstart -k gui/$(id -u)/dev.anynotate.bridge");
-        console.log("Re-run `anynotate install` so the Chrome helper allows it too.");
+        console.log("Re-run `anynotate install` so the bridge and the Chrome helper allow it.");
         break;
       }
       if (sub === "remove" && value) {
@@ -164,6 +190,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

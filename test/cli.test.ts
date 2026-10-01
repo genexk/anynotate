@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import pkg from "../package.json";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeBundle } from "../src/inbox/store";
@@ -87,4 +88,78 @@ test("prune rejects unknown arguments", async () => {
 test("retention <days> mentions the env override only when the env value is non-blank", async () => {
   expect((await cli(["retention", "7"], { ANYNOTATE_RETENTION_DAYS: "  " })).out).not.toContain("takes precedence");
   expect((await cli(["retention", "7"], { ANYNOTATE_RETENTION_DAYS: "3" })).out).toContain("takes precedence");
+});
+
+const CLI = join(import.meta.dir, "../src/cli.ts");
+const run = async (args: string[], env: Record<string, string> = {}) => {
+  const proc = Bun.spawn([process.execPath, CLI, ...args], {
+    env: { ...process.env, ANYNOTATE_HOME: join(home, "data"), HOME: home, USERPROFILE: home, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  return { code: await proc.exited, out, err };
+};
+
+test("install --dry-run lists the service start and prints no launchctl hints", async () => {
+  const r = await run(["install", "--dry-run"]);
+  expect(r.code).toBe(0);
+  const lines = r.out.trimEnd().split("\n");
+  expect(lines.some((l) => l.startsWith("would run: "))).toBe(true);
+  expect(lines).toContain(`would write ${join(home, "data", "install.json")}`);
+  expect(r.out).not.toMatch(/Next:|\$\(id -u\)|If the bridge was already running/);
+  expect(existsSync(join(home, "data"))).toBe(false);
+});
+
+test("install records the install kind and writes the service without starting it under ANYNOTATE_SERVICE_DRYRUN", async () => {
+  const r = await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+  expect(r.code).toBe(0);
+  const record = JSON.parse(readFileSync(join(home, "data", "install.json"), "utf8"));
+  expect(record).toMatchObject({ kind: "source", path: join(import.meta.dir, ".."), version: pkg.version, platform: process.platform });
+  expect(r.out).toContain("would run: ");
+  expect(r.out).not.toMatch(/^ran: /m);
+});
+
+const freePort = () => {
+  const s = Bun.serve({ port: 0, fetch: () => new Response() });
+  const port = s.port;
+  s.stop(true);
+  return String(port);
+};
+
+test.skipIf(process.platform === "win32")("bridge --detach starts a bridge with a pid file; --status and --stop control it", async () => {
+  const env = { ANYNOTATE_PORT: freePort() };
+  const pidFile = join(home, "data", "bridge.pid");
+  try {
+    const started = await run(["bridge", "--detach"], env);
+    expect(started.code).toBe(0);
+    expect(started.out).toContain(`bridge started on http://127.0.0.1:${env.ANYNOTATE_PORT}`);
+    const pid = Number(readFileSync(pidFile, "utf8").trim());
+    expect(pid).toBeGreaterThan(0);
+    expect((await fetch(`http://127.0.0.1:${env.ANYNOTATE_PORT}/health`)).ok).toBe(true);
+    expect((await run(["bridge", "--detach"], env)).out).toContain("bridge already running");
+    const status = await run(["bridge", "--status"], env);
+    expect(status.code).toBe(0);
+    expect(status.out).toContain(`(pid ${pid})`);
+    const stopped = await run(["bridge", "--stop"], env);
+    expect(stopped.code).toBe(0);
+    expect(stopped.out).toContain(`bridge stopped (pid ${pid})`);
+    expect(existsSync(pidFile)).toBe(false);
+    expect((await run(["bridge", "--status"], env)).code).toBe(1);
+    expect((await run(["bridge", "--stop"], env)).out).toContain("not running");
+  } finally {
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8").trim()));
+    } catch {}
+  }
+}, 30_000);
+
+test("bridge --stop leaves a pid alone when no bridge answers, and drops the stale pid file", async () => {
+  const env = { ANYNOTATE_PORT: freePort() };
+  mkdirSync(join(home, "data"), { recursive: true });
+  writeFileSync(join(home, "data", "bridge.pid"), `${process.pid}\n`);
+  const r = await run(["bridge", "--stop"], env);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain("removed a stale pid file");
+  expect(existsSync(join(home, "data", "bridge.pid"))).toBe(false);
 });
