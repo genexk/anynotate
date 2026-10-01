@@ -75,10 +75,21 @@ Every caller, the extension included, sends `X-Anynotate-Token: <anynotate token
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ANYNOTATE_HOME` | `~/.anynotate` | Token, inbox (`$ANYNOTATE_HOME/inbox`) and session state. The Chrome helper always uses `~/.anynotate`; with a custom `ANYNOTATE_HOME` the extension cannot get the bridge's token |
+| `ANYNOTATE_HOME` | `~/.anynotate` | Token, inbox (`$ANYNOTATE_HOME/inbox`) and session state. Must be an absolute path; a blank or relative value is ignored. The Chrome helper always uses `~/.anynotate`; with a custom `ANYNOTATE_HOME` the extension cannot get the bridge's token |
 | `ANYNOTATE_PORT` | `47291` | Bridge port (always bound to `127.0.0.1`) |
 | `ANYNOTATE_ALLOWED_ORIGINS` | none | Comma-separated `chrome-extension://<id>` origins added to the allow-list, in addition to those in `$ANYNOTATE_HOME/origins`; other entries are ignored. An allowed origin gets CORS headers; the token is still required |
 | `ANYNOTATE_HERDR` | `herdr` | herdr binary used to list and prompt panes |
+| `ANYNOTATE_RETENTION_DAYS` | `30` | Days to keep a bundle, or `off`. Overrides `retentionDays` in `$ANYNOTATE_HOME/settings.json` |
+
+### Retention
+
+Bundles can hold sensitive screenshots, so the bridge deletes each one 30 days after it was delivered (or created, if it never was), at start and hourly, in both `inbox/` and `archive/`. Bundles with a delivery in progress are left alone.
+
+```bash
+anynotate retention            # show the setting and where it comes from
+anynotate retention 7          # or `off`; writes ~/.anynotate/settings.json (mode 600)
+anynotate prune --dry-run      # list what a sweep would delete; drop --dry-run to delete now
+```
 
 ### Sending a bundle by hand
 

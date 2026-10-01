@@ -9,6 +9,7 @@ import { runUpdate, spawnExec } from "./agent/update";
 import { addOrigin, ORIGIN_RE, readOrigins, removeOrigin } from "./bridge/origins";
 import { createBridge } from "./bridge/server";
 import { loadOrCreateToken } from "./bridge/token";
+import { describeRetention, pruneBundles, resolveRetention, startRetentionSweeps, writeRetentionSetting } from "./inbox/retention";
 import { archiveOlderThan } from "./inbox/store";
 import { Agent } from "@anynotate/protocol";
 
@@ -39,6 +40,7 @@ switch (cmd) {
         console.error("anynotate: archive sweep failed:", err);
       }
     };
+    startRetentionSweeps();
     sweep();
     setInterval(sweep, 86_400_000);
     console.log(`anynotate bridge on http://127.0.0.1:${server.port} (origins: ${origins.join(", ") || "none"})`);
@@ -95,6 +97,41 @@ switch (cmd) {
     });
     process.exit(code);
   }
+  case "retention": {
+    try {
+      if (rest[0] !== undefined) {
+        writeRetentionSetting(rest[0]);
+        console.log(`retention set to ${describeRetention(resolveRetention({}))}`);
+        if (process.env.ANYNOTATE_RETENTION_DAYS?.trim()) console.log("Note: ANYNOTATE_RETENTION_DAYS is set and takes precedence.");
+        break;
+      }
+      const r = resolveRetention();
+      if (r.warning) console.error(`anynotate: ${r.warning}`);
+      console.log(`retention ${describeRetention(r)}`);
+    } catch (err) {
+      console.error(`anynotate: ${(err as Error).message}`);
+      console.log("usage: anynotate retention [<days>|off]");
+      process.exit(1);
+    }
+    break;
+  }
+  case "prune": {
+    if (rest.some((a) => a !== "--dry-run")) {
+      console.error("usage: anynotate prune [--dry-run]");
+      process.exit(1);
+    }
+    const dryRun = rest.includes("--dry-run");
+    const r = resolveRetention();
+    if (r.warning) console.error(`anynotate: ${r.warning}`);
+    if (r.days === null) {
+      console.log("retention is off; nothing pruned");
+      break;
+    }
+    const { pruned } = pruneBundles(r.days, { dryRun });
+    for (const id of pruned) console.log(`${dryRun ? "would prune" : "pruned"} ${id}`);
+    console.log(`${dryRun ? "would prune" : "pruned"} ${pruned.length} bundle(s) older than ${r.days} days`);
+    break;
+  }
   case "origin": {
     const [sub, value] = rest;
     try {
@@ -120,6 +157,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>>");
+    console.log("usage: anynotate <bridge|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

@@ -260,14 +260,18 @@ export function archiveOlderThan(days: number, now = new Date()): string[] {
       console.error(`anynotate: could not archive ${bundle.id}:`, err);
     }
   }
-  if (moved.length) {
-    let current: string | undefined;
-    try {
-      current = readlinkSync(latestPath());
-    } catch {}
-    if (current === undefined || moved.includes(current)) pointLatestAt(listBundles(1)[0]?.bundle.id);
-  }
+  repointLatestIfGone(moved);
   return moved;
+}
+
+// Points inbox/latest at the newest remaining bundle when its target is among the removed ids (or it is missing).
+export function repointLatestIfGone(removed: string[]): void {
+  if (!removed.length) return;
+  let current: string | undefined;
+  try {
+    current = readlinkSync(latestPath());
+  } catch {}
+  if (current === undefined || removed.includes(current)) pointLatestAt(listBundles(1)[0]?.bundle.id);
 }
 
 export function queuedFor(agent: Agent, sessionId: string | undefined, cwd: string): Bundle[] {
