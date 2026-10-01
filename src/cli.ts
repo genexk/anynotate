@@ -108,8 +108,8 @@ switch (cmd) {
     console.log(loadOrCreateToken());
     break;
   case "install": {
-    if (rest.some((a) => a !== "--dry-run")) {
-      console.error("usage: anynotate install [--dry-run]");
+    if (rest.some((a) => a !== "--dry-run" && a !== "--no-hints")) {
+      console.error("usage: anynotate install [--dry-run] [--no-hints]");
       process.exit(1);
     }
     const dry = rest.includes("--dry-run");
@@ -286,6 +286,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <--version|bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <--version|bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run] [--no-hints]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

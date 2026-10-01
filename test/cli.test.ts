@@ -167,10 +167,16 @@ test("uninstall --purge deletes an installed data dir that holds a token", async
   expect(existsSync(join(home, "data"))).toBe(false);
 });
 
+test("install accepts --no-hints, which update passes to the new executable", async () => {
+  const r = await run(["install", "--dry-run", "--no-hints"]);
+  expect(r.code).toBe(0);
+  expect(r.err).not.toContain("usage:");
+});
+
 test("install rejects unknown flags", async () => {
   const r = await run(["install", "--purge"]);
   expect(r.code).toBe(1);
-  expect(r.err).toContain("usage: anynotate install [--dry-run]");
+  expect(r.err).toContain("usage: anynotate install [--dry-run] [--no-hints]");
 });
 
 test("uninstall rejects unknown flags", async () => {
