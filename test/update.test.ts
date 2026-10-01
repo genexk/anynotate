@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { type Exec, runUpdate, spawnExec } from "../src/agent/update";
 
 const repo = "/home/me/anynotate";
+const bun = "/home/me/.bun/bin/bun";
 type Call = { argv: string[]; cwd?: string };
 type Result = { code: number; stdout: string; stderr: string };
 
@@ -23,8 +24,7 @@ function run(f: { calls: Call[]; exec: Exec }, opts: { dryRun?: boolean; before?
   const err: string[] = [];
   const pulled = () => f.calls.some((c) => c.argv.includes("pull"));
   const code = runUpdate({
-    repo,
-    uid: 501,
+    kind: { kind: "source", repo, bun },
     exec: f.exec,
     dryRun: opts.dryRun ?? false,
     log: (l) => out.push(l),
@@ -74,7 +74,7 @@ test("refuses when git status fails", () => {
   expect(err.join("\n")).toContain("index file corrupt");
 });
 
-test("happy path pulls, installs, re-runs the installer, restarts the bridge and prints the versions", () => {
+test("happy path pulls, installs, re-runs the installer (which restarts the bridge) and prints the versions", () => {
   const f = fake();
   const { code, out, err } = run(f, { before: "0.2.0", after: "0.3.0" });
   expect(code).toBe(0);
@@ -82,21 +82,21 @@ test("happy path pulls, installs, re-runs the installer, restarts the bridge and
     { argv: branchCheck, cwd: undefined },
     { argv: statusCheck, cwd: undefined },
     { argv: ["git", "-C", repo, "pull", "--ff-only"], cwd: undefined },
-    { argv: ["bun", "install"], cwd: repo },
-    { argv: [`${repo}/bin/anynotate`, "install", "--no-hints"], cwd: repo },
-    { argv: ["launchctl", "kickstart", "-k", "gui/501/dev.anynotate.bridge"], cwd: undefined },
+    { argv: [bun, "install"], cwd: repo },
+    { argv: [bun, `${repo}/src/cli.ts`, "install", "--no-hints"], cwd: repo },
   ]);
+  expect(f.calls.some((c) => c.argv[0] === "launchctl")).toBe(false);
   expect(err).toEqual([]);
   expect(out.at(-1)).toBe("anynotate 0.2.0 → 0.3.0");
 });
 
 test("stops at the first failing step and reports its stderr on the error stream", () => {
-  const f = fake((argv) => (argv[0] === "bun" ? { code: 1, stderr: "lockfile had changes" } : undefined));
+  const f = fake((argv) => (argv[0] === bun ? { code: 1, stderr: "lockfile had changes" } : undefined));
   const { code, out, err } = run(f, { before: "0.2.0", after: "0.3.0" });
   expect(code).toBe(1);
-  expect(f.calls.map((c) => c.argv[0])).toEqual(["git", "git", "git", "bun"]);
+  expect(f.calls.map((c) => c.argv[0])).toEqual(["git", "git", "git", bun]);
   expect(err.join("\n")).toContain("lockfile had changes");
-  expect(err.join("\n")).toContain("'bun install' failed (exit 1)");
+  expect(err.join("\n")).toContain(`'${bun} install' failed (exit 1)`);
   expect(out.join("\n")).not.toContain("lockfile had changes");
   expect(out.join("\n")).not.toContain("→");
 });
@@ -108,11 +108,10 @@ test("dry run logs every step and calls only the read-only checks", () => {
   expect(err).toEqual([]);
   expect(f.calls.map((c) => c.argv)).toEqual([branchCheck, statusCheck]);
   const would = out.filter((l) => l.startsWith("would run "));
-  expect(would).toHaveLength(4);
+  expect(would).toHaveLength(3);
   expect(would[0]).toContain("git -C /home/me/anynotate pull --ff-only");
-  expect(would[1]).toContain("bun install");
-  expect(would[2]).toContain("/home/me/anynotate/bin/anynotate install");
-  expect(would[3]).toContain("launchctl kickstart -k gui/501/dev.anynotate.bridge");
+  expect(would[1]).toContain(`${bun} install`);
+  expect(would[2]).toContain(`${bun} /home/me/anynotate/src/cli.ts install --no-hints`);
 });
 
 test("dry run still refuses off main", () => {

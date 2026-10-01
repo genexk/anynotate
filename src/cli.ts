@@ -1,6 +1,6 @@
 import { readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import pkg from "../package.json";
 import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
@@ -12,10 +12,11 @@ import { formatChecks, runDoctor } from "./agent/doctor";
 import { anynotateHome } from "./inbox/paths";
 import { dryRunExec, spawnExec as platformExec } from "./platform/exec";
 import { currentPlatform, installPaths } from "./platform/os";
-import { detectUserSystemd } from "./platform/service";
+import { detectUserSystemd, planService, runSteps } from "./platform/service";
 import { runNativeHost } from "./agent/native-host";
 import { callerOrigin, isNativeHostInvocation } from "./platform/nativehost";
-import { runUpdate, spawnExec } from "./agent/update";
+import { selfUpdate } from "./agent/selfupdate";
+import { runUpdate } from "./agent/update";
 import { addOrigin, ORIGIN_RE, readOrigins, removeOrigin } from "./bridge/origins";
 import { createBridge } from "./bridge/server";
 import { loadOrCreateToken } from "./bridge/token";
@@ -52,7 +53,6 @@ const [cmd, ...rest] = process.argv.slice(2);
 // Test-only: report external commands (service, registry, PATH, ACLs) instead of running them.
 const externalDryRun = process.env.ANYNOTATE_EXTERNAL_DRYRUN === "1";
 const exec = externalDryRun ? dryRunExec : platformExec;
-const repo = resolve(import.meta.dir, "..");
 
 switch (cmd) {
   case "bridge": {
@@ -145,14 +145,59 @@ switch (cmd) {
     process.exit(log.some((l) => l.startsWith("failed") || l.startsWith("refused")) ? 1 : 0);
   }
   case "update": {
-    const code = runUpdate({
-      repo,
-      uid: process.getuid?.() ?? 501,
-      exec: spawnExec,
-      dryRun: rest.includes("--dry-run"),
-      log: (line) => console.log(line),
-      err: (line) => console.error(line),
-      readVersion: () => JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).version,
+    if (rest.some((a) => a !== "--dry-run")) {
+      console.error("usage: anynotate update [--dry-run]");
+      process.exit(1);
+    }
+    const dryRun = rest.includes("--dry-run");
+    const kind = detectInstallKind();
+    const log = (line: string) => console.log(line);
+    const err = (line: string) => console.error(line);
+    if (kind.kind === "source") {
+      process.exit(
+        runUpdate({
+          kind,
+          exec,
+          dryRun,
+          log,
+          err,
+          readVersion: () => JSON.parse(readFileSync(join(kind.repo, "package.json"), "utf8")).version,
+        }),
+      );
+    }
+    const platform = currentPlatform();
+    const home = homedir();
+    const paths = installPaths(platform, home, process.env);
+    const code = await selfUpdate({
+      platform,
+      arch: process.arch,
+      current: pkg.version,
+      exe: kind.exe,
+      fetch,
+      dryRun,
+      log,
+      err,
+      stop: () => {
+        const plan = planService({
+          platform,
+          home,
+          env: process.env,
+          exe: commandArgv(kind),
+          logPath: paths.logPath,
+          dataDir: paths.dataDir,
+          uid: process.getuid?.() ?? 0,
+          hasUserSystemd: platform === "linux" && detectUserSystemd(exec),
+        });
+        const r = runSteps(plan.stop, exec, false);
+        for (const line of r.log) log(line);
+        return r.ok;
+      },
+      reinstall: (exe) => {
+        const r = exec([exe, "install", "--no-hints"]);
+        if (r.stdout.trim()) log(r.stdout.trimEnd());
+        if (r.stderr.trim()) err(r.stderr.trimEnd());
+        return r.code;
+      },
     });
     process.exit(code);
   }
