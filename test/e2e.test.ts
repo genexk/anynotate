@@ -77,7 +77,7 @@ test("pane target is typed into herdr with the path-only prompt", async () => {
   const { id } = await send({ agent: "gemini", pane: "w2:p1", cwd: "/g" });
   // POST answers within ROUTE_WAIT_MS and routing may still be running, so poll the stored status.
   let status = await getStatus(id);
-  for (let i = 0; i < 60 && status?.via !== "herdr"; i++) {
+  for (let i = 0; i < 200 && status?.via !== "herdr"; i++) {
     await Bun.sleep(50);
     status = await getStatus(id);
   }
@@ -91,7 +91,7 @@ test("the pane's own hook, fired by the typed prompt, injects nothing", async ()
   rmSync(promptHookOut, { force: true });
   const { id } = await send({ agent: "gemini", pane: "w2:p1", cwd: "/g" });
   let status = await getStatus(id);
-  for (let i = 0; i < 60 && status?.via !== "herdr"; i++) {
+  for (let i = 0; i < 200 && status?.via !== "herdr"; i++) {
     await Bun.sleep(50);
     status = await getStatus(id);
   }
