@@ -37,7 +37,7 @@ function fakeSysctl(translated: string) {
 
 function publish(asset: string, sumsFor: (hash: string) => string = (h) => `${h}  ${asset}\n`) {
   writeFileSync(join(release, asset), STUB);
-  writeFileSync(join(release, "SHA256SUMS"), `${"0".repeat(64)}  anynotate-other\n${sumsFor(sha256(STUB))}`);
+  writeFileSync(join(release, "SHA256SUMS"), `${"0".repeat(64)}  anynotate-other\n${"e".repeat(64)}  ${asset}.sig\n${sumsFor(sha256(STUB))}`);
 }
 
 function run(env: Record<string, string> = {}, shell = "sh", path = `${fakebin}:${process.env.PATH}`) {
@@ -117,6 +117,34 @@ describe.skipIf(!posix)("install.sh", () => {
     expect(existsSync(join(binDir, "anynotate"))).toBe(false);
   });
 
+  test("refuses when the install path is a directory", () => {
+    mkdirSync(join(binDir, "anynotate"), { recursive: true });
+    publish("anynotate-linux-x64");
+    const r = run();
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("is a directory");
+    expect(existsSync(record)).toBe(false);
+    expect(readdirSync(binDir)).toEqual(["anynotate"]);
+  });
+
+  test("makes a relative ANYNOTATE_BIN_DIR absolute", () => {
+    publish("anynotate-linux-x64");
+    const r = spawnSync("sh", [installSh], {
+      cwd: tmp,
+      encoding: "utf8",
+      env: { PATH: `${fakebin}:${process.env.PATH}`, HOME: tmp, ANYNOTATE_BASE_URL: `file://${release}`, ANYNOTATE_BIN_DIR: "rel/bin/", ANYNOTATE_TEST_RECORD: record },
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/install: +\/\S*\/rel\/bin\/anynotate\n/);
+    expect(existsSync(join(tmp, "rel", "bin", "anynotate"))).toBe(true);
+  });
+
+  test("restricts curl to https (and file:// for CI), including redirects", () => {
+    const code = readFileSync(installSh, "utf8");
+    expect(code).toContain("--proto '=https,file'");
+    expect(code).toContain("--proto-redir '=https'");
+  });
+
   test("replaces an existing install", () => {
     mkdirSync(binDir);
     writeFileSync(join(binDir, "anynotate"), "old");
@@ -182,6 +210,8 @@ describe.skipIf(!posix)("install.sh", () => {
     publish("anynotate-linux-x64");
     expect(run().out).toContain(`Add ${binDir} to your PATH`);
     expect(run({}, "sh", `${binDir}:${fakebin}:${process.env.PATH}`).out).not.toContain("to your PATH");
+    expect(run({}, "sh", `${binDir}/:${fakebin}:${process.env.PATH}`).out).not.toContain("to your PATH");
+    expect(run({ ANYNOTATE_BIN_DIR: `${binDir}/` }, "sh", `${binDir}:${fakebin}:${process.env.PATH}`).out).not.toContain("to your PATH");
   });
 
   test("fails rather than skip verification when no SHA-256 tool exists", () => {
@@ -246,6 +276,22 @@ describe("install.ps1", () => {
     expect(code).toContain("Get-FileHash");
     expect(code).toContain("'Run: anynotate doctor'");
     expect(code).toContain("https://github.com/genexk/anynotate/releases/latest/download");
+  });
+
+  test("cleans old binaries, rolls back a failed swap and surfaces install output", () => {
+    const code = src();
+    expect(code).toContain("anynotate.exe.*.old");
+    expect(code).toMatch(/Move-Item -LiteralPath \$aside -Destination \$exe/);
+    expect(code).toMatch(/\$ErrorActionPreference = 'Continue'[\s\S]*& \$exe install 2>&1 \| Out-Host[\s\S]*\$code = \$LASTEXITCODE[\s\S]*\$ErrorActionPreference = 'Stop'/);
+  });
+
+  test("normalizes the bin dir, refuses ';' and non-Windows hosts, notes ARM64 emulation", () => {
+    const code = src();
+    expect(code).toContain("[IO.Path]::GetFullPath(");
+    expect(code).toMatch(/Contains\(';'\)/);
+    expect(code).toContain("$env:OS -ne 'Windows_NT'");
+    expect(code).toContain("PROCESSOR_ARCHITEW6432");
+    expect(code).toContain("emulation");
   });
 
   test.skipIf(!pwsh)("parses with the PowerShell parser", () => {

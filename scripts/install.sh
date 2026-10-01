@@ -74,12 +74,22 @@ resolve_bin_dir() {
     [ -n "${HOME:-}" ] || fail "HOME is not set; set ANYNOTATE_BIN_DIR to choose an install directory."
     bin_dir="$HOME/.local/bin"
   fi
+  case "$bin_dir" in
+    /*) ;;
+    *) bin_dir="$(pwd)/$bin_dir" ;;
+  esac
+  while [ "$bin_dir" != / ] && [ "${bin_dir%/}" != "$bin_dir" ]; do
+    bin_dir=${bin_dir%/}
+  done
   bin="$bin_dir/anynotate"
+  if [ -d "$bin" ]; then
+    fail "$bin is a directory; remove it or set ANYNOTATE_BIN_DIR elsewhere."
+  fi
 }
 
 download() {
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$2" "$1" || fail "download failed: $1"
+    curl -fsSL --proto '=https,file' --proto-redir '=https' -o "$2" "$1" || fail "download failed: $1"
   elif command -v wget >/dev/null 2>&1; then
     wget -q -O "$2" "$1" || fail "download failed: $1"
   else
@@ -142,7 +152,7 @@ main() {
   verify
 
   mkdir -p "$bin_dir"
-  staged="$bin_dir/.anynotate.new.$$"
+  staged=$(mktemp "$bin_dir/.anynotate.new.XXXXXX")
   cp "$tmp_dir/$asset" "$staged"
   chmod 755 "$staged"
   mv -f "$staged" "$bin"
@@ -153,7 +163,7 @@ main() {
   "$bin" install || fail "\`$bin install\` failed; fix the problem above and run it again."
 
   case ":${PATH:-}:" in
-    *":$bin_dir:"*) ;;
+    *":$bin_dir:"* | *":$bin_dir/:"*) ;;
     *)
       say ""
       say "Add $bin_dir to your PATH, e.g. in your shell profile:"

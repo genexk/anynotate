@@ -19,6 +19,10 @@ function Install-Anynotate {
   $ProgressPreference = 'SilentlyContinue'
   Set-StrictMode -Version Latest
 
+  if ($env:OS -ne 'Windows_NT') {
+    throw 'install.ps1 is for Windows; use install.sh'
+  }
+
   try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
   } catch {
@@ -29,6 +33,13 @@ function Install-Anynotate {
   }
 
   $asset = 'anynotate-windows-x64.exe'
+  $hostArch = $env:PROCESSOR_ARCHITEW6432
+  if (-not $hostArch) {
+    $hostArch = $env:PROCESSOR_ARCHITECTURE
+  }
+  if ($hostArch -eq 'ARM64') {
+    Write-Host 'Note: this is ARM64 Windows; the x64 build runs under emulation (Windows 11).'
+  }
 
   $base = $env:ANYNOTATE_BASE_URL
   if (-not $base) {
@@ -48,6 +59,10 @@ function Install-Anynotate {
     }
     $binDir = Join-Path $env:LOCALAPPDATA 'anynotate\bin'
   }
+  if ($binDir.Contains(';')) {
+    throw "anynotate installer: install directory '$binDir' contains ';', which cannot go on PATH."
+  }
+  $binDir = [IO.Path]::GetFullPath($binDir).TrimEnd('\')
   $exe = Join-Path $binDir 'anynotate.exe'
 
   Write-Host 'Anynotate installer'
@@ -99,25 +114,46 @@ function Install-Anynotate {
     $staged = "$exe.new"
     Copy-Item -LiteralPath $downloaded -Destination $staged -Force
 
-    # A running anynotate.exe cannot be overwritten but can be renamed, so
-    # move it aside; the leftover .old is removed on the next install.
-    $old = "$exe.old"
-    if (Test-Path -LiteralPath $old) {
-      try { Remove-Item -LiteralPath $old -Force } catch { }
+    # A running anynotate.exe cannot be overwritten but can be renamed, so it
+    # is moved aside to anynotate.exe.old (or anynotate.exe.<guid>.old while an
+    # older one is still locked). Leftovers from earlier installs whose
+    # processes have exited are removed here, best-effort.
+    $leftovers = @(Get-ChildItem -LiteralPath $binDir -Filter 'anynotate.exe.*.old' -ErrorAction SilentlyContinue)
+    $leftovers += @(Get-Item -LiteralPath "$exe.old" -ErrorAction SilentlyContinue)
+    foreach ($leftover in $leftovers) {
+      if ($leftover) {
+        try { Remove-Item -LiteralPath $leftover.FullName -Force } catch { }
+      }
     }
+    $aside = $null
     if (Test-Path -LiteralPath $exe) {
-      $target = $old
-      if (Test-Path -LiteralPath $old) {
-        $target = "$exe." + [Guid]::NewGuid().ToString('N') + '.old'
+      $aside = "$exe.old"
+      if (Test-Path -LiteralPath $aside) {
+        $aside = "$exe." + [Guid]::NewGuid().ToString('N') + '.old'
       }
       try {
-        Move-Item -LiteralPath $exe -Destination $target -Force
+        Move-Item -LiteralPath $exe -Destination $aside -Force
       } catch {
         Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
         throw "anynotate installer: cannot replace $exe ($($_.Exception.Message))."
       }
     }
-    Move-Item -LiteralPath $staged -Destination $exe -Force
+    try {
+      Move-Item -LiteralPath $staged -Destination $exe -Force
+    } catch {
+      $reason = $_.Exception.Message
+      $kept = ''
+      if ($aside) {
+        try {
+          Move-Item -LiteralPath $aside -Destination $exe -Force
+          $kept = '; the previous version was restored'
+        } catch {
+          $kept = "; the previous version is at $aside"
+        }
+      }
+      Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+      throw "anynotate installer: cannot install $exe ($reason)$kept."
+    }
     Write-Host "Installed $exe"
 
     # Read the raw user PATH so %VAR% entries stay unexpanded when written back.
@@ -161,9 +197,13 @@ function Install-Anynotate {
     }
 
     Write-Host "Running $exe install"
-    & $exe install
-    if ($LASTEXITCODE -ne 0) {
-      throw "anynotate installer: '$exe install' failed (exit $LASTEXITCODE); fix the problem above and run it again."
+    # Native stderr must not become a terminating error under 'Stop'.
+    $ErrorActionPreference = 'Continue'
+    & $exe install 2>&1 | Out-Host
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($code -ne 0) {
+      throw "anynotate installer: '$exe install' failed (exit $code); fix the problem above and run it again."
     }
   } finally {
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
