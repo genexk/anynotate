@@ -13,7 +13,13 @@ export const exeName = (p: Platform) => (p === "win32" ? "anynotate.exe" : "anyn
 // Paths are built with the target platform's separator regardless of the host, so callers and tests are host-independent.
 export const pathFor = (p: Platform) => (p === "win32" ? win32 : posix);
 
-const localAppData = (home: string, env: Env) => env.LOCALAPPDATA ?? win32.join(home, "AppData", "Local");
+const absoluteOr = (path: typeof posix, value: string | undefined, fallback: string) => {
+  const v = value?.trim();
+  return v && path.isAbsolute(v) ? v : fallback;
+};
+
+export const localAppData = (home: string, env: Env) => absoluteOr(win32, env.LOCALAPPDATA, win32.join(home, "AppData", "Local"));
+export const xdgConfigHome = (home: string, env: Env) => absoluteOr(posix, env.XDG_CONFIG_HOME, posix.join(home, ".config"));
 
 export type InstallPaths = { binDir: string; binPath: string; dataDir: string; logPath: string };
 
@@ -53,7 +59,7 @@ export function browserConfigRoot(p: Platform, b: Browser, home: string, env: En
     case "darwin":
       return posix.join(home, "Library", "Application Support", ...DARWIN_DIRS[b]);
     case "linux":
-      return posix.join(env.XDG_CONFIG_HOME ?? posix.join(home, ".config"), ...LINUX_DIRS[b]);
+      return posix.join(xdgConfigHome(home, env), ...LINUX_DIRS[b]);
     case "win32":
       return win32.join(localAppData(home, env), ...WIN32_DIRS[b], "User Data");
   }

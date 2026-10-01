@@ -1,6 +1,6 @@
 import { posix, win32 } from "node:path";
 import { type Exec, type ExecResult, regQueryFor } from "./exec";
-import type { Env, Platform } from "./os";
+import { type Env, type Platform, xdgConfigHome } from "./os";
 
 export const LAUNCHD_LABEL = "dev.anynotate.bridge";
 export const SYSTEMD_UNIT = "anynotate-bridge.service";
@@ -37,11 +37,6 @@ function desktopArg(a: string): string {
   const quoted = /[\s"'\\><~|&;$*?#()`]/.test(a) || a === "" ? `"${a.replace(/["`$\\]/g, "\\$&")}"` : a;
   return quoted.replace(/\\/g, "\\\\").replace(/%/g, "%%");
 }
-
-const xdgConfigHome = (home: string, env: Env) => {
-  const v = env.XDG_CONFIG_HOME?.trim();
-  return v && posix.isAbsolute(v) ? v : posix.join(home, ".config");
-};
 
 // launchd starts agents with a bare PATH; Homebrew's bin on Apple silicon holds tools the bridge drives, such as herdr.
 function launchd(o: ServiceOptions): ServicePlan {

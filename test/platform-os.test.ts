@@ -43,6 +43,13 @@ test("installPaths on win32 falls back to AppData\\Local without LOCALAPPDATA", 
   expect(installPaths("win32", "C:\\Users\\me", {}).binDir).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin");
 });
 
+test("installPaths on win32 ignores a blank or relative LOCALAPPDATA", () => {
+  for (const LOCALAPPDATA of ["", "   ", "AppData\\Local", ".\\Local"]) {
+    expect(installPaths("win32", "C:\\Users\\me", { LOCALAPPDATA }).binDir).toBe("C:\\Users\\me\\AppData\\Local\\anynotate\\bin");
+  }
+  expect(installPaths("win32", "C:\\Users\\me", { LOCALAPPDATA: "  D:\\Local  " }).binDir).toBe("D:\\Local\\anynotate\\bin");
+});
+
 test("installPaths honours an absolute ANYNOTATE_HOME", () => {
   const p = installPaths("linux", "/home/me", { ANYNOTATE_HOME: "/srv/an" });
   expect(p.dataDir).toBe("/srv/an");
@@ -74,6 +81,17 @@ test("browserConfigRoot on linux honours XDG_CONFIG_HOME", () => {
   );
   expect(browserConfigRoot("linux", "chrome", "/home/me", {})).toBe("/home/me/.config/google-chrome");
   expect(browserConfigRoot("linux", "chromium", "/home/me", {})).toBe("/home/me/.config/chromium");
+});
+
+test("browserConfigRoot ignores a blank or relative XDG_CONFIG_HOME and LOCALAPPDATA", () => {
+  for (const XDG_CONFIG_HOME of ["", "  ", "cfg", "./cfg"]) {
+    expect(browserConfigRoot("linux", "chrome", "/home/me", { XDG_CONFIG_HOME })).toBe("/home/me/.config/google-chrome");
+  }
+  for (const LOCALAPPDATA of ["", "  ", "AppData\\Local"]) {
+    expect(browserConfigRoot("win32", "chrome", "C:\\Users\\me", { LOCALAPPDATA })).toBe(
+      "C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data",
+    );
+  }
 });
 
 test("browserConfigRoot on win32", () => {
