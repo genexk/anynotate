@@ -5,11 +5,12 @@ import pkg from "../package.json";
 import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
-import { commandArgv, detectInstallKind } from "./agent/installkind";
+import { commandArgv, detectInstallKind, readInstallRecord } from "./agent/installkind";
+import { applyUninstall, planUninstall } from "./agent/uninstall";
 import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, stopBridge } from "./bridge/control";
 import { anynotateHome } from "./inbox/paths";
 import { spawnExec as platformExec } from "./platform/exec";
-import { currentPlatform } from "./platform/os";
+import { currentPlatform, installPaths } from "./platform/os";
 import { detectUserSystemd } from "./platform/service";
 import { runNativeHost } from "./agent/native-host";
 import { callerOrigin, isNativeHostInvocation } from "./platform/nativehost";
@@ -119,6 +120,28 @@ switch (cmd) {
     }
     break;
   }
+  case "uninstall": {
+    if (rest.some((a) => a !== "--purge" && a !== "--dry-run")) {
+      console.error("usage: anynotate uninstall [--purge] [--dry-run]");
+      process.exit(1);
+    }
+    const platform = currentPlatform();
+    const home = homedir();
+    const steps = planUninstall({
+      platform,
+      home,
+      env: process.env,
+      record: readInstallRecord(installPaths(platform, home, process.env).dataDir),
+      kind: detectInstallKind(),
+      purge: rest.includes("--purge"),
+      uid: process.getuid?.() ?? 0,
+      hasUserSystemd: platform === "linux" && detectUserSystemd(platformExec),
+    });
+    const serviceDryRun = process.env.ANYNOTATE_SERVICE_DRYRUN === "1";
+    const log = applyUninstall(steps, platformExec, rest.includes("--dry-run"), { serviceDryRun });
+    for (const line of log) console.log(line);
+    process.exit(log.some((l) => l.startsWith("failed")) ? 1 : 0);
+  }
   case "update": {
     const code = runUpdate({
       repo,
@@ -190,6 +213,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

@@ -120,6 +120,32 @@ test("install records the install kind and writes the service without starting i
   expect(r.out).not.toMatch(/^ran: /m);
 });
 
+test("uninstall --dry-run lists the removals and changes nothing", async () => {
+  await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+  const r = await run(["uninstall", "--dry-run", "--purge"]);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain(`would remove ${join(home, "data", "install.json")}`);
+  expect(r.out.trimEnd().split("\n").at(-1)).toBe("Dry run: nothing was changed.");
+  expect(existsSync(join(home, "data", "install.json"))).toBe(true);
+});
+
+// Not on Windows: the native-host step deletes real HKCU registry keys there.
+test.skipIf(process.platform === "win32")("uninstall removes what install wrote and keeps the data dir", async () => {
+  await run(["install"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+  const r = await run(["uninstall"], { ANYNOTATE_SERVICE_DRYRUN: "1" });
+  expect(r.code).toBe(0);
+  expect(existsSync(join(home, "data", "install.json"))).toBe(false);
+  expect(existsSync(join(home, "data"))).toBe(true);
+  expect(r.out).not.toMatch(/^ran: /m);
+  expect(r.out.trimEnd().split("\n").at(-1)).toBe(`Anynotate removed. Your notes are still in ${join(home, "data")} (use --purge to delete them).`);
+});
+
+test("uninstall rejects unknown flags", async () => {
+  const r = await run(["uninstall", "--force"]);
+  expect(r.code).toBe(1);
+  expect(r.err).toContain("usage: anynotate uninstall [--purge] [--dry-run]");
+});
+
 const freePort = () => {
   const s = Bun.serve({ port: 0, fetch: () => new Response() });
   const port = s.port;

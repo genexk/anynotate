@@ -62,15 +62,17 @@ export function addHook(
   return { config: next, changed: true };
 }
 
-export function removeHook(config: any, command: string): { config: any; changed: boolean } {
+// command is either the exact command or a test such as isAnynotateHook for any form an earlier install wrote.
+export function removeHook(config: any, command: string | ((command: unknown) => boolean)): { config: any; changed: boolean } {
   if (!isObject(config) || !isObject(config.hooks)) return { config, changed: false };
+  const matches = typeof command === "string" ? (c: unknown) => c === command : command;
   const next = structuredClone(config);
   let changed = false;
   for (const [event, groups] of Object.entries<any>(next.hooks)) {
     if (!Array.isArray(groups)) continue;
     const kept = groups.filter((g) => {
       if (!Array.isArray(g?.hooks)) return true;
-      const hooks = g.hooks.filter((h: any) => h?.command !== command);
+      const hooks = g.hooks.filter((h: any) => !matches(h?.command));
       if (hooks.length === g.hooks.length) return true;
       changed = true;
       g.hooks = hooks;
