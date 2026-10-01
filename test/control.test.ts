@@ -40,6 +40,9 @@ test("isBridgeProcess reads the command line with ps, or CIM on Windows", () => 
   expect(isBridgeProcess(42, "linux", yes.exec)).toBe(true);
   expect(yes.calls).toEqual([["ps", "-o", "command=", "-p", "42"]]);
   expect(isBridgeProcess(42, "darwin", commandLine("sleep 30\n").exec)).toBe(false);
+  expect(isBridgeProcess(42, "linux", commandLine("python3 serve.py bridge\n").exec)).toBe(false);
+  expect(isBridgeProcess(42, "linux", commandLine("/home/me/.local/bin/anynotate bridge --pid-file\n").exec)).toBe(true);
+  expect(isBridgeProcess(42, "linux", commandLine("/home/me/.local/bin/anynotate hook --agent claude\n").exec)).toBe(false);
   expect(isBridgeProcess(42, "linux", commandLine("", 1).exec)).toBe(false);
   const win = commandLine('"C:\\Users\\me\\AppData\\Local\\anynotate\\bin\\anynotate.exe" bridge --pid-file\r\n');
   expect(isBridgeProcess(7, "win32", win.exec)).toBe(true);
@@ -52,8 +55,14 @@ test("stop does not kill a recycled pid whose command is not a bridge, and drops
   const sleeper = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 30000)"]);
   try {
     writeFileSync(join(dir, "bridge.pid"), `${sleeper.pid}\n`);
-    expect(await stopBridge(control({ exec: commandLine("bun -e setTimeout").exec }))).toBe(0);
+    const notBridge = commandLine("bun -e setTimeout").exec;
+    expect(await stopBridge(control({ exec: notBridge, answers: async () => false }))).toBe(0);
     expect(out).toEqual(["bridge not running (removed a stale pid file)"]);
+    expect(existsSync(join(dir, "bridge.pid"))).toBe(false);
+
+    writeFileSync(join(dir, "bridge.pid"), `${sleeper.pid}\n`);
+    expect(await stopBridge(control({ exec: notBridge }))).toBe(1);
+    expect(errs).toEqual([`anynotate: removed a stale pid file; ${SERVICE_MANAGED}`]);
     expect(existsSync(join(dir, "bridge.pid"))).toBe(false);
     expect(sleeper.exitCode).toBeNull();
     expect(sleeper.killed).toBe(false);
@@ -93,4 +102,12 @@ test("detach reports a child that exits while nothing answers", async () => {
   const child = [process.execPath, "-e", "process.exit(3)"];
   expect(await detachBridge(control({ answers: async () => false }), child, 5000)).toBe(1);
   expect(errs[0]).toBe(`anynotate: the bridge did not start (exit 3); see ${join(dir, "bridge.log")}`);
+});
+
+test("status shows a pid only when that pid is confirmed to be a bridge", async () => {
+  writeFileSync(join(dir, "bridge.pid"), `${process.pid}\n`);
+  expect(await bridgeStatus(control({ exec: commandLine("bun test").exec }))).toBe(0);
+  expect(out.at(-1)).toContain(SERVICE_MANAGED);
+  expect(await bridgeStatus(control({ exec: commandLine("/opt/bun/bin/bun /x/src/cli.ts bridge --pid-file").exec }))).toBe(0);
+  expect(out.at(-1)).toBe(`bridge running on http://127.0.0.1:1 (pid ${process.pid})`);
 });

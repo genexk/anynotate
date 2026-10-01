@@ -27,24 +27,32 @@ const answersOf = (c: Control) => c.answers ?? bridgeAnswers;
 export const SERVICE_MANAGED =
   "the bridge is managed by the system service; use `anynotate uninstall` or your service manager to stop it";
 
-// Whether pid is running an anynotate bridge, judged from its command line.
+// Whether pid is running an anynotate bridge, judged from its command line: our executable (anynotate, anynotate.exe
+// or cli.ts under bun) with the bridge subcommand.
 export function isBridgeProcess(pid: number, platform: Platform = currentPlatform(), exec: Exec = spawnExec): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   const r =
     platform === "win32"
       ? exec(["powershell", "-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`])
       : exec(["ps", "-o", "command=", "-p", String(pid)]);
-  return r.code === 0 && / bridge(\s|$)/.test(r.stdout.trim());
+  const line = r.stdout.trim();
+  return r.code === 0 && /(anynotate(\.exe)?|cli\.ts)"?\s/i.test(line) && /\sbridge(\s|$)/.test(line);
 }
 
-export async function bridgeAnswers(port: number, timeoutMs = 1000): Promise<boolean> {
+export type Health = { bridgeVersion: string; protocol: { version: number } };
+
+// The bridge's /health reply, or null when nothing answers there as an anynotate bridge.
+export async function readHealth(port: number, timeoutMs = 1000): Promise<Health | null> {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) });
-    return res.ok && (await res.json())?.ok === true;
+    const body = res.ok ? await res.json() : null;
+    return body?.ok === true ? { bridgeVersion: String(body.bridgeVersion), protocol: { version: Number(body.protocol?.version) } } : null;
   } catch {
-    return false;
+    return null;
   }
 }
+
+export const bridgeAnswers = async (port: number, timeoutMs = 1000): Promise<boolean> => (await readHealth(port, timeoutMs)) !== null;
 
 export function readPid(dataDir: string): number | null {
   try {
@@ -134,8 +142,13 @@ export async function stopBridge(c: Control, stopTimeoutMs = 5000): Promise<numb
     c.log("bridge not running (no pid file)");
     return 0;
   }
-  if (!(await answers(c.port)) || !alive(pid) || !isBridgeProcess(pid, c.platform, c.exec)) {
+  const up = await answers(c.port);
+  if (!up || !alive(pid) || !isBridgeProcess(pid, c.platform, c.exec)) {
     removePidFile(c.dataDir);
+    if (up) {
+      c.err(`anynotate: removed a stale pid file; ${SERVICE_MANAGED}`);
+      return 1;
+    }
     c.log("bridge not running (removed a stale pid file)");
     return 0;
   }
@@ -160,7 +173,7 @@ export async function bridgeStatus(c: Control): Promise<number> {
     return 1;
   }
   const pid = readPid(c.dataDir);
-  if (pid !== null && alive(pid)) c.log(`bridge running on http://127.0.0.1:${c.port} (pid ${pid})`);
+  if (pid !== null && alive(pid) && isBridgeProcess(pid, c.platform, c.exec)) c.log(`bridge running on http://127.0.0.1:${c.port} (pid ${pid})`);
   else c.log(`bridge running on http://127.0.0.1:${c.port}; ${SERVICE_MANAGED}`);
   return 0;
 }
