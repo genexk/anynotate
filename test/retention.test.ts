@@ -6,6 +6,7 @@ import {
   DEFAULT_RETENTION_DAYS, parseRetention, pruneBundles, resolveRetention, startRetentionSweeps, sweepRetention, writeRetentionSetting,
 } from "../src/inbox/retention";
 import { archiveOlderThan, writeBundle } from "../src/inbox/store";
+import { readLatest } from "../src/platform/latest";
 import { sampleInput } from "./fixtures/sample";
 
 let home: string;
@@ -72,15 +73,16 @@ test("an active claim protects a bundle; a stale claim does not", () => {
 test("inbox/latest is repointed to the newest remaining bundle when its target is pruned", () => {
   const kept = bundle("kept", daysAgo(10));
   const newestButOld = bundle("newest", daysAgo(5), daysAgo(45));
-  expect(readlinkSync(join(inbox(), "latest"))).toBe(newestButOld);
+  expect(readLatest(inbox())).toBe(newestButOld);
   pruneBundles(30, { now: NOW });
-  expect(readlinkSync(join(inbox(), "latest"))).toBe(kept);
+  expect(readLatest(inbox())).toBe(kept);
 });
 
 test("inbox/latest is removed when nothing remains", () => {
   bundle("only", daysAgo(60));
   pruneBundles(30, { now: NOW });
-  expect(() => readlinkSync(join(inbox(), "latest"))).toThrow();
+  expect(readLatest(inbox())).toBeNull();
+  expect(existsSync(join(inbox(), "latest"))).toBe(false);
 });
 
 test("off disables pruning", () => {
@@ -94,7 +96,7 @@ test("dry-run lists what would go and deletes nothing", () => {
   const r = pruneBundles(30, { now: NOW, dryRun: true });
   expect(r).toEqual({ days: 30, pruned: [id], dryRun: true });
   expect(gone(id)).toBe(false);
-  expect(readlinkSync(join(inbox(), "latest"))).toBe(id);
+  expect(readLatest(inbox())).toBe(id);
 });
 
 test("non-bundle dirs, files and symlinks pointing outside the inbox are never touched", () => {
@@ -161,12 +163,12 @@ test("invalid values fall back to the default with a warning", () => {
   expect(broken.warning).toContain("settings.json");
 });
 
-test("writeRetentionSetting keeps other keys and writes mode 600", () => {
+test("writeRetentionSetting keeps other keys and writes privately", () => {
   writeFileSync(join(home, "settings.json"), JSON.stringify({ other: "kept" }));
   expect(writeRetentionSetting("14")).toBe(14);
   const path = join(home, "settings.json");
   expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ other: "kept", retentionDays: 14 });
-  expect(statSync(path).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
   expect(writeRetentionSetting("off")).toBeNull();
   expect(JSON.parse(readFileSync(path, "utf8")).retentionDays).toBe("off");
   expect(() => writeRetentionSetting("later")).toThrow();

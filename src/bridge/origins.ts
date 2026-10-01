@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { anynotateHome, ensurePrivateDir } from "../inbox/paths";
+import { anynotateHome } from "../inbox/paths";
+import { makePrivateDir, writePrivateFile } from "../platform/files";
 
 export const ORIGIN_RE = /^chrome-extension:\/\/[a-p]{32}$/;
 export const originsPath = () => join(anynotateHome(), "origins");
@@ -10,13 +11,9 @@ export function readOrigins(path = originsPath()): string[] {
   return readFileSync(path, "utf8").split("\n").map((s) => s.trim()).filter((s) => ORIGIN_RE.test(s));
 }
 
-// Written to a temp file and renamed so a crash never leaves a half-written allow-list.
 function write(list: string[], path: string) {
-  ensurePrivateDir(dirname(path));
-  const tmp = `${path}.tmp-${process.pid}`;
-  writeFileSync(tmp, list.map((o) => `${o}\n`).join(""), { mode: 0o600 });
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, path);
+  makePrivateDir(dirname(path));
+  writePrivateFile(path, list.map((o) => `${o}\n`).join(""));
 }
 
 export function addOrigin(origin: string, path = originsPath()): { added: boolean } {

@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Agent, Agent as AgentSchema } from "@anynotate/protocol";
-import { ensureHome, ensurePrivateDir, sessionsDir } from "./paths";
+import { makePrivateDir } from "../platform/files";
+import { ensureHome, sessionsDir } from "./paths";
 
 type Seen = { agent: Agent; sessionId: string; cwd: string; lastSeen: string; pane?: string };
 
@@ -10,7 +11,7 @@ const fileFor = (agent: Agent, sessionId: string) =>
 
 export function touchSeen(agent: Agent, sessionId: string, cwd: string, now = new Date(), pane?: string): void {
   ensureHome();
-  ensurePrivateDir(sessionsDir());
+  makePrivateDir(sessionsDir());
   const path = fileFor(agent, sessionId);
   const tmp = `${path}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify({ agent, sessionId, cwd, lastSeen: now.toISOString(), ...(pane ? { pane } : {}) } satisfies Seen));

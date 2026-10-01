@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LATEST_ID_FILE, readLatest } from "../src/platform/latest";
 import { sampleInput } from "./fixtures/sample";
 
 let home: string;
@@ -246,16 +247,22 @@ test("archiveOlderThan keeps going when one bundle can't be moved", async () => 
 });
 
 const latestLink = () => join(home, "inbox", "latest");
-const latestTarget = () => readlinkSync(latestLink());
+const latestTarget = () => readLatest(join(home, "inbox"));
 
-test("inbox/latest is a symlink to the bundle written last, re-pointed on every write", async () => {
+test("inbox/latest points at the bundle written last, re-pointed on every write", async () => {
   const { writeBundle } = await store();
   const a = writeBundle({ ...sampleInput, title: "zeta" }, {}, new Date(2026, 5, 1, 12, 0, 0));
   expect(latestTarget()).toBe(a.id);
   expect(readFileSync(join(latestLink(), "README.md"), "utf8")).toContain("zeta");
   const b = writeBundle({ ...sampleInput, title: "alpha" }, {}, new Date(2026, 5, 1, 12, 0, 0));
   expect(latestTarget()).toBe(b.id);
-  expect(readdirSync(join(home, "inbox")).filter((n) => n.startsWith("latest"))).toEqual(["latest"]);
+  expect(readdirSync(join(home, "inbox")).filter((n) => n.startsWith("latest")).sort()).toEqual(["latest", LATEST_ID_FILE]);
+});
+
+test.skipIf(process.platform === "win32")("on macOS and Linux inbox/latest stays a relative symlink", async () => {
+  const { writeBundle } = await store();
+  const a = writeBundle(sampleInput, {}, new Date(2026, 5, 1, 12, 0, 0));
+  expect(readlinkSync(latestLink())).toBe(a.id);
 });
 
 test("listing, queuedFor and the archive sweep never treat inbox/latest as a bundle", async () => {
@@ -276,5 +283,6 @@ test("the archive sweep re-points inbox/latest at the newest bundle left, or rem
   expect(latestTarget()).toBe(kept.id);
   expect(archiveOlderThan(30, new Date(2026, 11, 1))).toEqual([kept.id]);
   expect(existsSync(latestLink())).toBe(false);
-  expect(() => latestTarget()).toThrow();
+  expect(existsSync(join(home, "inbox", LATEST_ID_FILE))).toBe(false);
+  expect(latestTarget()).toBeNull();
 });
