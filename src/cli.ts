@@ -5,6 +5,7 @@ import { runAnnotations } from "./agent/annotations";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
 import { runNativeHost } from "./agent/native-host";
+import { callerOrigin, isNativeHostInvocation } from "./platform/nativehost";
 import { runUpdate, spawnExec } from "./agent/update";
 import { addOrigin, ORIGIN_RE, readOrigins, removeOrigin } from "./bridge/origins";
 import { createBridge } from "./bridge/server";
@@ -23,6 +24,20 @@ function writeAll(data: string | Uint8Array) {
     }
   }
 }
+
+async function nativeHost(argv: string[]): Promise<never> {
+  // stdout is Chrome's protocol channel here: only the reply frame goes to it, everything else to stderr.
+  try {
+    await runNativeHost(argv, Bun.stdin.stream(), writeAll);
+  } catch (err) {
+    console.error(`anynotate native-host: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// Chrome launches the installed binary directly, with the caller's origin as the first argument.
+if (isNativeHostInvocation(process.argv)) await nativeHost([callerOrigin(process.argv)!]);
 
 const [cmd, ...rest] = process.argv.slice(2);
 const repo = resolve(import.meta.dir, "..");
@@ -57,16 +72,8 @@ switch (cmd) {
     } catch {}
     process.exit(0);
   }
-  case "native-host": {
-    // stdout is Chrome's protocol channel here: only the reply frame goes to it, everything else to stderr.
-    try {
-      await runNativeHost(rest, Bun.stdin.stream(), writeAll);
-    } catch (err) {
-      console.error(`anynotate native-host: ${(err as Error).message}`);
-      process.exit(1);
-    }
-    process.exit(0);
-  }
+  case "native-host":
+    await nativeHost(rest);
   case "annotations":
     console.log(runAnnotations(rest));
     break;
