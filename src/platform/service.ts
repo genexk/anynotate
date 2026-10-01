@@ -8,6 +8,7 @@ export const WINDOWS_TASK = "Anynotate Bridge";
 
 export type ServiceFile = { path: string; content: string; mode?: number; encoding?: "utf8" | "utf16le-bom" };
 // start/stop/remove are command sequences for runSteps; status is a single command whose exit code answers "running?".
+// start always replaces a running bridge, so re-running install (or update's reinstall) brings up the new binary.
 export type ServicePlan = { files: ServiceFile[]; start: string[][]; stop: string[][]; remove: string[][]; status: string[] };
 
 export type ServiceOptions = {
@@ -118,7 +119,7 @@ X-GNOME-Autostart-enabled=true
   const stop = [...o.exe, "bridge", "--stop"];
   return {
     files: [{ path, content }],
-    start: [[...o.exe, "bridge", "--detach"]],
+    start: [stop, [...o.exe, "bridge", "--detach"]],
     stop: [stop],
     remove: [stop],
     status: [...o.exe, "bridge", "--status"],
@@ -138,7 +139,7 @@ function windows(o: ServiceOptions): ServicePlan {
   const stop = [...o.exe, "bridge", "--stop"];
   return {
     files: [{ path, content, encoding: "utf16le-bom" }],
-    start: [["reg", "add", RUN_KEY, "/v", WINDOWS_TASK, "/t", "REG_SZ", "/d", `"${wscript}" "${path}"`, "/f"], [wscript, path]],
+    start: [stop, ["reg", "add", RUN_KEY, "/v", WINDOWS_TASK, "/t", "REG_SZ", "/d", `"${wscript}" "${path}"`, "/f"], [wscript, path]],
     stop: [stop],
     remove: [stop, ["reg", "delete", RUN_KEY, "/v", WINDOWS_TASK, "/f"]],
     status: [...o.exe, "bridge", "--status"],

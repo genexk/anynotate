@@ -102,7 +102,10 @@ test("linux without user systemd: an XDG autostart entry and the bridge's own de
   expect(c).toContain("[Desktop Entry]");
   expect(c).toContain(`Exec=${BIN} bridge --detach\n`);
   expect(c).toContain("X-GNOME-Autostart-enabled=true");
-  expect(plan.start).toEqual([[BIN, "bridge", "--detach"]]);
+  expect(plan.start).toEqual([
+    [BIN, "bridge", "--stop"],
+    [BIN, "bridge", "--detach"],
+  ]);
   expect(plan.stop).toEqual([[BIN, "bridge", "--stop"]]);
   expect(plan.remove).toEqual([[BIN, "bridge", "--stop"]]);
   expect(plan.status).toEqual([BIN, "bridge", "--status"]);
@@ -125,6 +128,7 @@ test("win32: a hidden UTF-16 vbs launcher registered under the per-user Run key"
   expect(plan.files[0]!.content).toContain(`CreateObject("WScript.Shell").Run """${exe}"" bridge --detach", 0, False`);
   const wscript = "D:\\Win\\System32\\wscript.exe";
   expect(plan.start).toEqual([
+    [exe, "bridge", "--stop"],
     ["reg", "add", RUN, "/v", "Anynotate Bridge", "/t", "REG_SZ", "/d", `"${wscript}" "${vbs}"`, "/f"],
     [wscript, vbs],
   ]);
@@ -137,7 +141,7 @@ test("win32: a hidden UTF-16 vbs launcher registered under the per-user Run key"
 });
 
 test("win32: wscript comes from SYSTEMROOT, then C:\\Windows", () => {
-  const wscript = (env: Record<string, string>) => planService({ ...WIN, env }).start[1]![0];
+  const wscript = (env: Record<string, string>) => planService({ ...WIN, env }).start.at(-1)![0];
   expect(wscript({ SYSTEMROOT: "E:\\W" })).toBe("E:\\W\\System32\\wscript.exe");
   expect(wscript({})).toBe("C:\\Windows\\System32\\wscript.exe");
 });
@@ -202,6 +206,16 @@ test("runSteps on win32 remove tolerates a stopped bridge, skips a Run value reg
   expect(run(0, 0)).toMatchObject({ ok: true, calls: [stop!, query, del!] });
   expect(run(0, 1).ok).toBe(false);
   expect(stop!.join(" ")).toContain("--stop");
+});
+
+test("pid-managed starts replace a running bridge and tolerate one that is not running", () => {
+  for (const plan of [planService({ ...base, platform: "linux", home: "/home/me", hasUserSystemd: false }), planService({ ...WIN, exe: ["C:\\a\\anynotate.exe"] })]) {
+    expect(plan.start[0]!.slice(-2)).toEqual(["bridge", "--stop"]);
+    const f = fakeExec({ [plan.start[0]!.join(" ")]: 1 });
+    const r = runSteps(plan.start, f.exec, false);
+    expect(r.ok).toBe(true);
+    expect(f.calls).toEqual(plan.start);
+  }
 });
 
 test("runSteps in dry-run mode only logs", () => {

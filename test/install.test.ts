@@ -447,7 +447,10 @@ test("a binary install links nothing, writes no wrapper, and registers the binar
   expect(JSON.parse(host.host!.kind === "write-manifest" ? host.host!.json : "{}").path).toBe(exe);
   const unit = steps.find((s) => s.path.endsWith("anynotate-bridge.desktop"))!;
   expect(unit.content).toContain(`Exec=${exe} bridge --detach`);
-  expect(steps.at(-1)!.argv).toEqual([[exe, "bridge", "--detach"]]);
+  expect(steps.at(-1)!.argv).toEqual([
+    [exe, "bridge", "--stop"],
+    [exe, "bridge", "--detach"],
+  ]);
 });
 
 test("a Windows plan registers the host per browser, writes the UTF-16 bridge.vbs and starts it from the Run key", () => {
@@ -458,7 +461,8 @@ test("a Windows plan registers the host per browser, writes the UTF-16 bridge.vb
   const vbs = steps.find((s) => s.path.endsWith("bridge.vbs"))!;
   expect(vbs.encoding).toBe("utf16le-bom");
   expect(steps.at(-2)!.path).toBe("C:\\Users\\me\\.anynotate\\install.json");
-  expect(steps.at(-1)!.argv![0]!.slice(0, 2)).toEqual(["reg", "add"]);
+  expect(steps.at(-1)!.argv![0]!.slice(-2)).toEqual(["bridge", "--stop"]);
+  expect(steps.at(-1)!.argv![1]!.slice(0, 2)).toEqual(["reg", "add"]);
 });
 
 test("a Windows source install puts an anynotate.cmd shim on its bin dir and a .cmd host wrapper", () => {
