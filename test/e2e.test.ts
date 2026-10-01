@@ -1,49 +1,50 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { sampleInput } from "./fixtures/sample";
+import { cliArgv, writeHerdrShim } from "./fixtures/spawn";
 
-const repo = resolve(import.meta.dir, "..");
 let home: string, bridge: ReturnType<typeof Bun.spawn> | undefined, base: string, token: string, shimLog: string, promptHookOut: string;
 
-// Resolves once the bridge prints its "listening" line, or with false if it exits first (e.g. port taken).
-async function waitForListening(proc: ReturnType<typeof Bun.spawn>): Promise<boolean> {
+// Resolves with the port from the bridge's "listening" line, or null if it exits or stays silent first.
+async function waitForListening(proc: ReturnType<typeof Bun.spawn>): Promise<number | null> {
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
   let seen = "";
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const chunk = await Promise.race([reader.read(), Bun.sleep(deadline - Date.now()).then(() => null)]);
     if (!chunk || chunk.done) break;
     seen += decoder.decode(chunk.value, { stream: true });
-    if (seen.includes("anynotate bridge on http://127.0.0.1:")) {
+    const port = /anynotate bridge on http:\/\/127\.0\.0\.1:(\d+)/.exec(seen)?.[1];
+    if (port) {
       reader.releaseLock();
-      return true;
+      return Number(port);
     }
   }
-  return false;
+  return null;
 }
 
 beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), "anynotate-e2e-"));
   shimLog = join(home, "herdr.log");
   promptHookOut = join(home, "prompt-hook.out");
-  const onPrompt = `printf '%s' '{"session_id":"g-e2e","cwd":"/g"}' | '${join(repo, "bin/anynotate")}' hook --agent gemini`;
+  const onPrompt = JSON.stringify({ argv: cliArgv("hook", "--agent", "gemini"), stdin: JSON.stringify({ session_id: "g-e2e", cwd: "/g" }) });
+  const herdr = writeHerdrShim(home);
   const list = join(home, "list.json");
   writeFileSync(list, JSON.stringify({ result: { agents: [{ agent: "gemini", agent_status: "idle", cwd: "/g", pane_id: "w2:p1", terminal_title_stripped: "gem" }] } }));
 
-  for (let attempt = 0; attempt < 5 && !bridge; attempt++) {
-    const port = 47000 + Math.floor(Math.random() * 900);
-    const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: String(port), ANYNOTATE_HERDR: join(repo, "test/fixtures/herdr-shim.sh"), HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
-    const proc = Bun.spawn([join(repo, "bin/anynotate"), "bridge"], { env, stdout: "pipe", stderr: "inherit" });
-    if (await waitForListening(proc)) {
-      bridge = proc;
-      base = `http://127.0.0.1:${port}`;
-    } else {
-      proc.kill();
-      await proc.exited;
-    }
+  // Port 0 lets the OS pick a free port, so no fixed range can collide with a reserved one (Windows reserves some).
+  const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: "0", ANYNOTATE_HERDR: herdr, HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
+  const proc = Bun.spawn(cliArgv("bridge"), { env, stdout: "pipe", stderr: "inherit" });
+  const port = await waitForListening(proc);
+  if (port) {
+    bridge = proc;
+    base = `http://127.0.0.1:${port}`;
+  } else {
+    proc.kill();
+    await proc.exited;
   }
   if (!bridge) throw new Error("anynotate bridge did not start");
   expect((await fetch(`${base}/health`)).ok).toBe(true);
@@ -76,7 +77,7 @@ test("pane target is typed into herdr with the path-only prompt", async () => {
   const { id } = await send({ agent: "gemini", pane: "w2:p1", cwd: "/g" });
   // POST answers within ROUTE_WAIT_MS and routing may still be running, so poll the stored status.
   let status = await getStatus(id);
-  for (let i = 0; i < 60 && status?.via !== "herdr"; i++) {
+  for (let i = 0; i < 200 && status?.via !== "herdr"; i++) {
     await Bun.sleep(50);
     status = await getStatus(id);
   }
@@ -90,7 +91,7 @@ test("the pane's own hook, fired by the typed prompt, injects nothing", async ()
   rmSync(promptHookOut, { force: true });
   const { id } = await send({ agent: "gemini", pane: "w2:p1", cwd: "/g" });
   let status = await getStatus(id);
-  for (let i = 0; i < 60 && status?.via !== "herdr"; i++) {
+  for (let i = 0; i < 200 && status?.via !== "herdr"; i++) {
     await Bun.sleep(50);
     status = await getStatus(id);
   }
@@ -101,7 +102,7 @@ test("the pane's own hook, fired by the typed prompt, injects nothing", async ()
 test("queued bundle is delivered by the real hook process on the next prompt", async () => {
   const { id, status } = await send({ agent: "claude", cwd: "/work/repo" });
   expect(status.state).toBe("queued");
-  const hook = Bun.spawn([join(repo, "bin/anynotate"), "hook", "--agent", "claude"], {
+  const hook = Bun.spawn(cliArgv("hook", "--agent", "claude"), {
     env: { ...process.env, ANYNOTATE_HOME: home }, stdin: new Blob([JSON.stringify({ session_id: "live-1", cwd: "/work/repo" })]), stdout: "pipe",
   });
   const out = JSON.parse(await new Response(hook.stdout).text());

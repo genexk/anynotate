@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, lstatSync, statSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, statSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BUNDLE_ID, Status } from "@anynotate/protocol";
+import { writePrivateFile } from "../platform/files";
 import { anynotateHome, archiveDir, ensureHome, inboxDir } from "./paths";
 import { repointLatestIfGone, STALE_CLAIM_MS } from "./store";
 
@@ -55,7 +56,7 @@ export function resolveRetention(env: Record<string, string | undefined> = proce
 export const describeRetention = (r: Retention) =>
   `${r.days === null ? "off" : `${r.days} day${r.days === 1 ? "" : "s"}`} (${r.source})`;
 
-// Keeps every other key; written to a temp file and renamed, mode 600 like the token.
+// Keeps every other key; written privately like the token.
 export function writeRetentionSetting(value: string): number | null {
   const days = parseRetention(value);
   if (days === undefined) throw new Error(`expected a whole number of days or "off", got ${value}`);
@@ -63,10 +64,7 @@ export function writeRetentionSetting(value: string): number | null {
   const settings = readSettings(path);
   settings.retentionDays = days ?? "off";
   ensureHome();
-  const tmp = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
-  writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, path);
+  writePrivateFile(path, `${JSON.stringify(settings, null, 2)}\n`);
   return days;
 }
 

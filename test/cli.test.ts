@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import pkg from "../package.json";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeBundle } from "../src/inbox/store";
 import { sampleInput } from "./fixtures/sample";
+import { cliArgv, REPO } from "./fixtures/spawn";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "anynotate-")); process.env.ANYNOTATE_HOME = home; });
@@ -11,7 +13,7 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process
 
 test("hook writes its full output to a pipe, well past 64 KB", async () => {
   const ids = [1, 2, 3].map((n) => writeBundle({ ...sampleInput, overall: `${n}`.repeat(300_000) }, {}).id);
-  const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), "hook", "--agent", "claude"], {
+  const proc = Bun.spawn(cliArgv("hook", "--agent", "claude"), {
     env: { ...process.env, ANYNOTATE_HOME: home },
     stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: "/tmp/repo" })),
     stdout: "pipe",
@@ -25,7 +27,7 @@ test("hook writes its full output to a pipe, well past 64 KB", async () => {
 
 test("hook --agent accepts any valid agent name and ignores an invalid one", async () => {
   const run = async (agent: string) => {
-    const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), "hook", "--agent", agent], {
+    const proc = Bun.spawn(cliArgv("hook", "--agent", agent), {
       env: { ...process.env, ANYNOTATE_HOME: home },
       stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: "/a" })),
       stdout: "pipe",
@@ -42,7 +44,7 @@ test("hook --agent accepts any valid agent name and ignores an invalid one", asy
 });
 
 const cli = async (args: string[], env: Record<string, string> = {}) => {
-  const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), ...args], {
+  const proc = Bun.spawn(cliArgv(...args), {
     env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_RETENTION_DAYS: "", ...env },
     stdout: "pipe",
     stderr: "pipe",
@@ -57,7 +59,7 @@ test("retention prints the effective setting and its source, and sets it in sett
   writeFileSync(join(home, "settings.json"), JSON.stringify({ other: 1 }));
   expect((await cli(["retention", "7"])).out).toBe("retention set to 7 days (settings.json)\n");
   expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8"))).toEqual({ other: 1, retentionDays: 7 });
-  expect(statSync(join(home, "settings.json")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(home, "settings.json")).mode & 0o777).toBe(0o600);
   expect((await cli(["retention"])).out).toBe("retention 7 days (settings.json)\n");
   expect((await cli(["retention", "off"])).out).toBe("retention set to off (settings.json)\n");
   const bad = await cli(["retention", "soon"]);
@@ -87,4 +89,142 @@ test("prune rejects unknown arguments", async () => {
 test("retention <days> mentions the env override only when the env value is non-blank", async () => {
   expect((await cli(["retention", "7"], { ANYNOTATE_RETENTION_DAYS: "  " })).out).not.toContain("takes precedence");
   expect((await cli(["retention", "7"], { ANYNOTATE_RETENTION_DAYS: "3" })).out).toContain("takes precedence");
+});
+
+const run = async (args: string[], env: Record<string, string> = {}) => {
+  const proc = Bun.spawn(cliArgv(...args), {
+    env: {
+      ...process.env,
+      ANYNOTATE_HOME: join(home, "data"),
+      HOME: home,
+      USERPROFILE: home,
+      LOCALAPPDATA: join(home, "AppData", "Local"),
+      XDG_CONFIG_HOME: join(home, ".config"),
+      ANYNOTATE_EXTERNAL_DRYRUN: "1",
+      ...env,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  return { code: await proc.exited, out, err };
+};
+
+test("install --dry-run lists the service start and prints no launchctl hints", async () => {
+  const r = await run(["install", "--dry-run"]);
+  expect(r.code).toBe(0);
+  const lines = r.out.trimEnd().split("\n");
+  expect(lines.some((l) => l.startsWith("would run: "))).toBe(true);
+  expect(lines).toContain(`would write ${join(home, "data", "install.json")}`);
+  expect(r.out).not.toMatch(/Next:|\$\(id -u\)|If the bridge was already running/);
+  expect(existsSync(join(home, "data"))).toBe(false);
+});
+
+test("install records the install kind and writes the service without starting it under ANYNOTATE_EXTERNAL_DRYRUN", async () => {
+  const r = await run(["install"]);
+  expect(r.code).toBe(0);
+  const record = JSON.parse(readFileSync(join(home, "data", "install.json"), "utf8"));
+  expect(record).toMatchObject({ kind: "source", path: REPO, version: pkg.version, platform: process.platform });
+  expect(r.out).toContain("would run: ");
+  expect(r.out).not.toMatch(/^ran: /m);
+});
+
+test("uninstall --dry-run lists the removals and changes nothing", async () => {
+  await run(["install"]);
+  writeFileSync(join(home, "data", "token"), "secret\n");
+  const r = await run(["uninstall", "--dry-run", "--purge"]);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain(`would delete ${join(home, "data")}`);
+  expect(r.out).toContain(`would remove ${join(home, "data", "install.json")}`);
+  expect(r.out.trimEnd().split("\n").at(-1)).toBe("Dry run: nothing was changed.");
+  expect(existsSync(join(home, "data", "install.json"))).toBe(true);
+});
+
+test("uninstall removes what install wrote and keeps the data dir", async () => {
+  await run(["install"]);
+  const r = await run(["uninstall"]);
+  expect(r.code).toBe(0);
+  expect(existsSync(join(home, "data", "install.json"))).toBe(false);
+  expect(existsSync(join(home, "data"))).toBe(true);
+  expect(r.out).not.toMatch(/^ran: /m);
+  expect(r.out.trimEnd().split("\n").at(-1)).toBe(`Anynotate removed. Your notes are still in ${join(home, "data")} (use --purge to delete them).`);
+});
+
+test("a refused --purge exits non-zero and keeps the data dir", async () => {
+  await run(["install"]);
+  const r = await run(["uninstall", "--purge"]);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain(`refused to delete ${join(home, "data")}`);
+  expect(existsSync(join(home, "data"))).toBe(true);
+});
+
+test("uninstall --purge deletes an installed data dir that holds a token", async () => {
+  await run(["install"]);
+  writeFileSync(join(home, "data", "token"), "secret\n");
+  const r = await run(["uninstall", "--purge"]);
+  expect(r.out).not.toContain("refused");
+  expect(r.code).toBe(0);
+  expect(existsSync(join(home, "data"))).toBe(false);
+});
+
+test("install accepts --no-hints, which update passes to the new executable", async () => {
+  const r = await run(["install", "--dry-run", "--no-hints"]);
+  expect(r.code).toBe(0);
+  expect(r.err).not.toContain("usage:");
+});
+
+test("install rejects unknown flags", async () => {
+  const r = await run(["install", "--purge"]);
+  expect(r.code).toBe(1);
+  expect(r.err).toContain("usage: anynotate install [--dry-run] [--no-hints]");
+});
+
+test("uninstall rejects unknown flags", async () => {
+  const r = await run(["uninstall", "--force"]);
+  expect(r.code).toBe(1);
+  expect(r.err).toContain("usage: anynotate uninstall [--purge] [--dry-run]");
+});
+
+const freePort = () => {
+  const s = Bun.serve({ port: 0, fetch: () => new Response() });
+  const port = s.port;
+  s.stop(true);
+  return String(port);
+};
+
+test("bridge --detach starts a bridge with a pid file; --status and --stop control it", async () => {
+  const env = { ANYNOTATE_PORT: freePort() };
+  const pidFile = join(home, "data", "bridge.pid");
+  try {
+    const started = await run(["bridge", "--detach"], env);
+    expect(started.code).toBe(0);
+    expect(started.out).toContain(`bridge started on http://127.0.0.1:${env.ANYNOTATE_PORT}`);
+    const pid = Number(readFileSync(pidFile, "utf8").trim());
+    expect(pid).toBeGreaterThan(0);
+    expect((await fetch(`http://127.0.0.1:${env.ANYNOTATE_PORT}/health`)).ok).toBe(true);
+    expect((await run(["bridge", "--detach"], env)).out).toContain("bridge already running");
+    const status = await run(["bridge", "--status"], env);
+    expect(status.code).toBe(0);
+    expect(status.out).toContain(`(pid ${pid})`);
+    const stopped = await run(["bridge", "--stop"], env);
+    expect(stopped.code).toBe(0);
+    expect(stopped.out).toContain(`bridge stopped (pid ${pid})`);
+    expect(existsSync(pidFile)).toBe(false);
+    expect((await run(["bridge", "--status"], env)).code).toBe(1);
+    expect((await run(["bridge", "--stop"], env)).out).toContain("not running");
+  } finally {
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8").trim()));
+    } catch {}
+  }
+}, 30_000);
+
+test("bridge --stop leaves a pid alone when no bridge answers, and drops the stale pid file", async () => {
+  const env = { ANYNOTATE_PORT: freePort() };
+  mkdirSync(join(home, "data"), { recursive: true });
+  writeFileSync(join(home, "data", "bridge.pid"), `${process.pid}\n`);
+  const r = await run(["bridge", "--stop"], env);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain("removed a stale pid file");
+  expect(existsSync(join(home, "data", "bridge.pid"))).toBe(false);
 });

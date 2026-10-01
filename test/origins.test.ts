@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cliArgv } from "./fixtures/spawn";
 import { addOrigin, originsPath, readOrigins, removeOrigin } from "../src/bridge/origins";
 
 let home: string;
@@ -17,7 +18,7 @@ test("add is idempotent, validated, owner-only; list and remove work", () => {
   expect(() => addOrigin("https://evil.example")).toThrow(/chrome-extension/);
   expect(() => addOrigin("chrome-extension://zzz")).toThrow(/chrome-extension/);
   expect(readOrigins()).toEqual([`chrome-extension://${id}`]);
-  expect(statSync(originsPath()).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(originsPath()).mode & 0o777).toBe(0o600);
   expect(readFileSync(originsPath(), "utf8")).toBe(`chrome-extension://${id}\n`);
   expect(removeOrigin(`chrome-extension://${id}`)).toEqual({ removed: true });
   expect(removeOrigin(`chrome-extension://${id}`)).toEqual({ removed: false });
@@ -49,13 +50,13 @@ test("the bridge CLI merges env and file origins", async () => {
   const shared = "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
   addOrigin(`chrome-extension://${id}`);
   addOrigin(shared);
-  const port = 48000 + Math.floor(Math.random() * 1000);
-  const proc = Bun.spawn(["./bin/anynotate", "bridge"], {
-    env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: String(port), ANYNOTATE_ALLOWED_ORIGINS: `chrome-extension://pppppppppppppppppppppppppppppppp, ${shared}, http://localhost:3000, null, *` },
+  const proc = Bun.spawn(cliArgv("bridge"), {
+    env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: "0", ANYNOTATE_ALLOWED_ORIGINS: `chrome-extension://pppppppppppppppppppppppppppppppp, ${shared}, http://localhost:3000, null, *` },
     stdout: "pipe",
   });
   try {
-    const line = await startupLine(proc.stdout, 5000);
+    const line = await startupLine(proc.stdout, 10_000);
+    const port = Number(/127\.0\.0\.1:(\d+)/.exec(line)?.[1]);
     expect(line).toContain(`chrome-extension://${id}`);
     expect(line).toContain("chrome-extension://pppppppppppppppppppppppppppppppp");
     expect(line.split(shared).length).toBe(2);

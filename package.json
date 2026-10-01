@@ -1,6 +1,6 @@
 {
   "name": "anynotate",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -9,7 +9,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build:protocol": "cd packages/protocol && bun run build"
+    "build:protocol": "cd packages/protocol && bun run build",
+    "build:binaries": "bun scripts/build-binaries.ts"
   },
   "dependencies": { "@anynotate/protocol": "workspace:*" },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.6.0" }

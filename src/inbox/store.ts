@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Agent, Bundle, BUNDLE_ID, type BundleInput, Status } from "@anynotate/protocol";
 
 export { BUNDLE_ID };
-import { archiveDir, ensureHome, ensurePrivateDir, inboxDir } from "./paths";
+import { makePrivateDir } from "../platform/files";
+import { clearLatest, readLatest, writeLatest } from "../platform/latest";
+import { archiveDir, ensureHome, inboxDir } from "./paths";
 import { renderReadme } from "./readme";
 
 const ALLOWED_FILE = /^(page\.md|screenshot\.png|snapshot\.html|crops\/A\d+\.png)$/;
@@ -16,7 +18,7 @@ export function bundleDir(id: string): string {
 
 function ensureInbox(): string {
   ensureHome();
-  return ensurePrivateDir(inboxDir());
+  return makePrivateDir(inboxDir());
 }
 
 const slugify = (text: string) =>
@@ -91,31 +93,14 @@ export function writeBundle(input: BundleInput, files: Record<string, Uint8Array
   return bundle;
 }
 
-export const LATEST = "latest";
-const latestPath = () => join(inboxDir(), LATEST);
-
 function pointLatestAt(id: string | undefined): void {
-  const link = latestPath();
-  const tmp = `${link}.tmp-${process.pid}`;
-  try {
-    rmSync(tmp, { force: true });
-    if (!id) {
-      rmSync(link, { force: true });
-      return;
-    }
-    symlinkSync(id, tmp);
-    renameSync(tmp, link);
-  } catch (err) {
-    rmSync(tmp, { force: true });
-    console.error(`anynotate: could not update ${link}:`, err);
-  }
+  if (id) writeLatest(inboxDir(), id);
+  else clearLatest(inboxDir());
 }
 
 export function latestBundleId(): string | undefined {
-  try {
-    const id = readlinkSync(latestPath());
-    if (BUNDLE_ID.test(id) && existsSync(join(inboxDir(), id, "annotations.json"))) return id;
-  } catch {}
+  const id = readLatest(inboxDir());
+  if (id && existsSync(join(inboxDir(), id, "annotations.json"))) return id;
   return listBundles(1)[0]?.bundle.id;
 }
 
@@ -253,7 +238,7 @@ export function archiveOlderThan(days: number, now = new Date()): string[] {
     // One bundle that can't be moved must not stop the sweep, nor crash the bridge that runs it.
     try {
       ensureHome();
-      ensurePrivateDir(archiveDir());
+      makePrivateDir(archiveDir());
       renameSync(bundleDir(bundle.id), join(archiveDir(), bundle.id));
       moved.push(bundle.id);
     } catch (err) {
@@ -267,11 +252,8 @@ export function archiveOlderThan(days: number, now = new Date()): string[] {
 // Points inbox/latest at the newest remaining bundle when its target is among the removed ids (or it is missing).
 export function repointLatestIfGone(removed: string[]): void {
   if (!removed.length) return;
-  let current: string | undefined;
-  try {
-    current = readlinkSync(latestPath());
-  } catch {}
-  if (current === undefined || removed.includes(current)) pointLatestAt(listBundles(1)[0]?.bundle.id);
+  const current = readLatest(inboxDir());
+  if (current === null || removed.includes(current)) pointLatestAt(listBundles(1)[0]?.bundle.id);
 }
 
 export function queuedFor(agent: Agent, sessionId: string | undefined, cwd: string): Bundle[] {

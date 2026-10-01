@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { join, resolve } from "node:path";
 import { bunExec, type Exec } from "../src/bridge/exec";
 import { herdrPromptText, listPanes, PROMPT_TIMEOUT_MS, promptPane, waitIdle } from "../src/bridge/herdr";
 import { STALE_CLAIM_MS } from "../src/inbox/store";
@@ -47,11 +48,11 @@ test("waitIdle waits for idle or done with the given timeout", async () => {
 });
 
 test("promptPane submits the fixed path-only prompt", async () => {
-  process.env.ANYNOTATE_HOME = "/tmp/mh";
+  process.env.ANYNOTATE_HOME = resolve("/home/me/.anynotate");
   const calls: string[][] = [];
   expect(await promptPane("w4:pV", "b-1", { exec: fakeExec({}, calls), bin: "herdr" })).toEqual({ ok: true });
   expect(calls).toEqual([["herdr", "agent", "prompt", "w4:pV", herdrPromptText("b-1"), "--wait", "--until", "working", "--until", "idle", "--timeout", "10000"]]);
-  expect(herdrPromptText("b-1")).toBe("Browser notes waiting: read /tmp/mh/inbox/b-1/README.md and act on them.");
+  expect(herdrPromptText("b-1")).toBe(`Browser notes waiting: read ${join(resolve("/home/me/.anynotate"), "inbox", "b-1", "README.md")} and act on them.`);
 });
 
 test("promptPane's exec timeout stays below the stale-claim TTL", async () => {

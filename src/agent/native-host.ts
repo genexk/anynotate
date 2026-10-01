@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { readOrigins } from "../bridge/origins";
 import { loadOrCreateToken } from "../bridge/token";
 import { extensionOrigins } from "./install";
@@ -38,8 +37,6 @@ export function nativeReply(request: unknown, callerOrigin: string | undefined, 
   return { ok: true, token: readToken() };
 }
 
-const repo = resolve(import.meta.dir, "../..");
-
 // Reads exactly one request and writes exactly one reply. EOF before a full frame rejects without
 // writing; an oversized or malformed frame gets an error reply and nothing more is read.
 export async function runNativeHost(argv: string[], input: AsyncIterable<Uint8Array>, write: (b: Uint8Array) => void): Promise<void> {
@@ -65,6 +62,6 @@ export async function runNativeHost(argv: string[], input: AsyncIterable<Uint8Ar
   if (!complete) throw new Error("input closed before a full message");
   const reply: NativeReply = failure
     ? { ok: false, error: failure }
-    : nativeReply(request, argv[0], [...readOrigins(), ...extensionOrigins(repo)], loadOrCreateToken);
+    : nativeReply(request, argv[0], [...readOrigins(), ...extensionOrigins()], loadOrCreateToken);
   write(encodeMessage(reply));
 }

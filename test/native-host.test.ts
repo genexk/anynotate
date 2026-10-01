@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cliArgv } from "./fixtures/spawn";
 import { decodeMessage, encodeMessage, MAX_MESSAGE_BYTES, nativeReply, runNativeHost } from "../src/agent/native-host";
 
 const ID = "abcdefghijklmnopabcdefghijklmnop";
@@ -116,7 +117,6 @@ test("runNativeHost rejects on EOF before a full frame and writes nothing", asyn
   expect(out).toEqual([]);
 });
 
-const bin = join(import.meta.dir, "../bin/anynotate");
 
 async function readFrame(stream: ReadableStream<Uint8Array>) {
   let buf = new Uint8Array(0);
@@ -130,7 +130,7 @@ async function readFrame(stream: ReadableStream<Uint8Array>) {
 
 test("the native-host command hands an allowed extension the token and exits while stdin stays open", async () => {
   writeFileSync(join(home, "origins"), `${ALLOWED[0]}\n`);
-  const proc = Bun.spawn([bin, "native-host", `${ALLOWED[0]}/`], {
+  const proc = Bun.spawn(cliArgv("native-host", `${ALLOWED[0]}/`), {
     stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
   });
   proc.stdin.write(encodeMessage({ type: "token" }));
@@ -141,7 +141,7 @@ test("the native-host command hands an allowed extension the token and exits whi
 });
 
 test("the native-host command refuses a foreign extension", async () => {
-  const proc = Bun.spawn([bin, "native-host", "chrome-extension://pponmlkjihgfedcbapponmlkjihgfedcb/"], {
+  const proc = Bun.spawn(cliArgv("native-host", "chrome-extension://pponmlkjihgfedcbapponmlkjihgfedcb/"), {
     stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
   });
   proc.stdin.write(encodeMessage({ type: "token" }));
@@ -153,7 +153,7 @@ test("the native-host command refuses a foreign extension", async () => {
 });
 
 test("the native-host command exits non-zero with empty stdout on a truncated frame", async () => {
-  const proc = Bun.spawn([bin, "native-host", `${ALLOWED[0]}/`], {
+  const proc = Bun.spawn(cliArgv("native-host", `${ALLOWED[0]}/`), {
     stdin: new Uint8Array([...frameHeader(10), 1, 2]), stdout: "pipe", stderr: "pipe", env: { ...process.env, ANYNOTATE_HOME: home },
   });
   const out = await new Response(proc.stdout).arrayBuffer();

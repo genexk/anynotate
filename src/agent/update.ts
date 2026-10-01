@@ -1,11 +1,10 @@
-import { join } from "node:path";
-import { LAUNCHD_LABEL } from "./install";
+import type { Exec } from "../platform/exec";
+import { commandArgv, type InstallKind } from "./installkind";
 
-export type Exec = (argv: string[], cwd?: string) => { code: number; stdout: string; stderr: string };
+export { type Exec, spawnExec } from "../platform/exec";
 
 export type UpdateOptions = {
-  repo: string;
-  uid: number;
+  kind: Extract<InstallKind, { kind: "source" }>;
   exec: Exec;
   dryRun: boolean;
   log: (line: string) => void;
@@ -13,17 +12,9 @@ export type UpdateOptions = {
   readVersion: () => string;
 };
 
-export const spawnExec: Exec = (argv, cwd) => {
-  try {
-    const proc = Bun.spawnSync(argv, { cwd, stdout: "pipe", stderr: "pipe" });
-    return { code: proc.exitCode ?? 1, stdout: proc.stdout.toString(), stderr: proc.stderr.toString() };
-  } catch (e) {
-    return { code: 127, stdout: "", stderr: (e as Error).message };
-  }
-};
-
 export function runUpdate(o: UpdateOptions): number {
-  const { repo, exec, log, err } = o;
+  const { exec, log, err } = o;
+  const { repo, bun } = o.kind;
   const refuse = (why: string) => {
     err(`anynotate update: ${why}`);
     return 1;
@@ -38,11 +29,11 @@ export function runUpdate(o: UpdateOptions): number {
   if (status.code !== 0) return refuse(`cannot read the status of ${repo}: ${status.stderr.trim()}`);
   if (status.stdout.trim()) return refuse(`${repo} has uncommitted changes; commit or discard them first:\n${status.stdout.trimEnd()}`);
 
+  // install rewrites the service definition and restarts the bridge, so it is the last step.
   const steps: { argv: string[]; cwd?: string }[] = [
     { argv: ["git", "-C", repo, "pull", "--ff-only"] },
-    { argv: ["bun", "install"], cwd: repo },
-    { argv: [join(repo, "bin/anynotate"), "install", "--no-hints"], cwd: repo },
-    { argv: ["launchctl", "kickstart", "-k", `gui/${o.uid}/${LAUNCHD_LABEL}`] },
+    { argv: [bun, "install"], cwd: repo },
+    { argv: [...commandArgv(o.kind), "install", "--no-hints"], cwd: repo },
   ];
   const show = (s: { argv: string[]; cwd?: string }) => s.argv.join(" ") + (s.cwd ? ` (in ${s.cwd})` : "");
 

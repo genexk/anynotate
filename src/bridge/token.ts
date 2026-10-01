@@ -1,5 +1,6 @@
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { ensureHome, tokenPath } from "../inbox/paths";
+import { writePrivateFile } from "../platform/files";
 
 const TOKEN = /^[0-9a-f]{64}$/;
 
@@ -13,9 +14,6 @@ export function loadOrCreateToken(): string {
   }
   ensureHome();
   const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
-  const tmp = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
-  writeFileSync(tmp, `${token}\n`, { mode: 0o600 });
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, path);
+  writePrivateFile(path, `${token}\n`);
   return token;
 }
