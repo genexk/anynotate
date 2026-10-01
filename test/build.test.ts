@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json";
+import { decodeMessage, encodeMessage } from "../src/agent/native-host";
 import { assetName } from "../src/agent/selfupdate";
 import { currentPlatform } from "../src/platform/os";
 import { formatSums, hostTarget, outfileFor, parseArgs, TARGETS } from "../scripts/build-binaries";
@@ -38,6 +39,8 @@ test("--out and --targets narrow the build", () => {
   expect(p.targets.map(outfileFor)).toEqual(["anynotate-linux-x64", "anynotate-windows-x64.exe"]);
   expect(() => parseArgs(["--targets", "linux-ia32"])).toThrow("unknown target linux-ia32");
   expect(() => parseArgs(["--bogus"])).toThrow();
+  expect(() => parseArgs(["--out", "--targets"])).toThrow("--out needs a value");
+  expect(() => parseArgs(["--targets", "--out", "x"])).toThrow("--targets needs a value");
 });
 
 const compileWorks = (() => {
@@ -83,6 +86,21 @@ describe.skipIf(!compileWorks || !host)("the compiled host binary", () => {
 
         expect(run("--version").out.trim()).toBe("0.4.0");
 
+        const pinned = `chrome-extension://${(JSON.parse(read("assets/extension-ids.json")) as string[])[0]}/`;
+        const askToken = (...args: string[]) => {
+          const hostHome = mkdtempSync(join(work, "host-"));
+          const r = Bun.spawnSync([exe, ...args], { cwd: work, env: { ...env, ANYNOTATE_HOME: hostHome }, stdin: encodeMessage({ type: "token" }), stderr: "pipe" });
+          const reply = decodeMessage(new Uint8Array(r.stdout));
+          if (!reply) throw new Error(`no reply from ${args.join(" ")} (exit ${r.exitCode}): ${r.stderr.toString()}`);
+          return reply.value as { ok: boolean; token?: string; error?: string };
+        };
+        for (const args of [[pinned], ["native-host", pinned]]) {
+          expect(askToken(...args)).toMatchObject({ ok: true, token: expect.any(String) });
+        }
+        for (const args of [["chrome-extension://abcdefghijklmnopabcdefghijklmnop/"], ["native-host", "chrome-extension://abcdefghijklmnopabcdefghijklmnop/"]]) {
+          expect(askToken(...args)).toEqual({ ok: false, error: "origin not allowed" });
+        }
+
         mkdirSync(join(home, ".claude"), { recursive: true });
         const toml = join(home, ".gemini", "commands", "annotations.toml");
         mkdirSync(join(home, ".gemini", "commands"), { recursive: true });
@@ -96,12 +114,12 @@ describe.skipIf(!compileWorks || !host)("the compiled host binary", () => {
         expect(dry.out).toContain(`would remove ${toml}`);
 
         const real = run("install");
+        if (real.code !== 0) throw new Error(`install exited ${real.code}: ${real.err}`);
         expect(readFileSync(join(home, ".claude", "skills", "annotations", "SKILL.md"), "utf8")).toBe(read("assets/skill/SKILL.md"));
         expect(readFileSync(join(home, ".anynotate", "origins"), "utf8")).toBe(`${origin}\n`);
         expect(existsSync(toml)).toBe(false);
         const record = JSON.parse(readFileSync(join(home, ".anynotate", "install.json"), "utf8"));
         expect(record).toMatchObject({ kind: "binary", path: exe, version: "0.4.0" });
-        expect(real.code).toBe(0);
         expect(existsSync(join(home, ".anynotate", "native-host"))).toBe(false);
       } finally {
         rmSync(work, { recursive: true, force: true });

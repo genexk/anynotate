@@ -39,7 +39,8 @@ export function parseArgs(argv: string[]): { out: string; targets: Target[] } {
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     const value = argv[i + 1];
-    if ((flag === "--out" || flag === "--targets") && value) {
+    if (flag === "--out" || flag === "--targets") {
+      if (!value || value.startsWith("--")) throw new Error(`${flag} needs a value`);
       i++;
       if (flag === "--out") out = value;
       else
