@@ -7,7 +7,8 @@ import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
 import { commandArgv, detectInstallKind, readInstallRecord } from "./agent/installkind";
 import { applyUninstall, planUninstall } from "./agent/uninstall";
-import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, stopBridge } from "./bridge/control";
+import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, readHealth, stopBridge } from "./bridge/control";
+import { formatChecks, runDoctor } from "./agent/doctor";
 import { anynotateHome } from "./inbox/paths";
 import { dryRunExec, spawnExec as platformExec } from "./platform/exec";
 import { currentPlatform, installPaths } from "./platform/os";
@@ -155,6 +156,23 @@ switch (cmd) {
     });
     process.exit(code);
   }
+  case "doctor": {
+    const port = bridgePort();
+    const checks = await runDoctor({
+      platform: currentPlatform(),
+      home: homedir(),
+      env: process.env,
+      uid: process.getuid?.() ?? 0,
+      version: pkg.version,
+      exec,
+      fetchHealth: () => readHealth(port),
+      port,
+      externalDryRun,
+    });
+    const { text, code } = formatChecks(checks);
+    process.stdout.write(text);
+    process.exit(code);
+  }
   case "retention": {
     try {
       if (rest[0] !== undefined) {
@@ -214,6 +232,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }
