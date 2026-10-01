@@ -25,6 +25,8 @@ const isObject = (v: unknown): v is Record<string, any> => typeof v === "object"
 // clone's launcher, wherever it lived) or bun followed by cli.ts. Compound commands such as `x && anynotate …` are
 // the user's own and never match.
 const TOKEN = String.raw`(?:"[^"]*"|[^\s"]+)`;
+// Shell syntax inside a token (even a quoted one, where $( and ` still expand) makes it something other than a path.
+const SHELL_META = /[;&|`$<>()]/;
 const baseName = (token: string) => token.replace(/^"|"$/g, "").split(/[\\/]/).pop() ?? "";
 
 export function isAnynotateHook(command: unknown, agent: string): boolean {
@@ -32,6 +34,7 @@ export function isAnynotateHook(command: unknown, agent: string): boolean {
   const m = new RegExp(`^(${TOKEN})(?: (${TOKEN}))? hook --agent ${agent.replace(/\./g, "\\.")}$`).exec(command);
   if (!m) return false;
   const [, first, second] = m as unknown as [string, string, string | undefined];
+  if ([first, second].some((t) => t !== undefined && SHELL_META.test(t))) return false;
   if (second === undefined) return /^anynotate(\.exe)?$/.test(baseName(first));
   return /^bun(\.exe)?$/.test(baseName(first)) && baseName(second) === "cli.ts";
 }

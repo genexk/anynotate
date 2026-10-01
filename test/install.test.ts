@@ -569,5 +569,9 @@ test("isAnynotateHook matches only a command that is solely our executable", () 
     "node /x/cli.ts hook --agent claude",
     "env X=1 anynotate hook --agent claude",
     "anynotate hook --agent claude --x",
+    "true&&/usr/bin/anynotate hook --agent claude",
+    '"$(touch x)/anynotate" hook --agent claude',
+    "`touch x`/anynotate hook --agent claude",
+    "/opt/bun/bin/bun /x/src/cli.ts;rm hook --agent claude",
   ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, false]);
 });
