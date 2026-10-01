@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeBundle } from "../src/inbox/store";
 import { sampleInput } from "./fixtures/sample";
+import { cliArgv, REPO } from "./fixtures/spawn";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "anynotate-")); process.env.ANYNOTATE_HOME = home; });
@@ -12,7 +13,7 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process
 
 test("hook writes its full output to a pipe, well past 64 KB", async () => {
   const ids = [1, 2, 3].map((n) => writeBundle({ ...sampleInput, overall: `${n}`.repeat(300_000) }, {}).id);
-  const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), "hook", "--agent", "claude"], {
+  const proc = Bun.spawn(cliArgv("hook", "--agent", "claude"), {
     env: { ...process.env, ANYNOTATE_HOME: home },
     stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: "/tmp/repo" })),
     stdout: "pipe",
@@ -26,7 +27,7 @@ test("hook writes its full output to a pipe, well past 64 KB", async () => {
 
 test("hook --agent accepts any valid agent name and ignores an invalid one", async () => {
   const run = async (agent: string) => {
-    const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), "hook", "--agent", agent], {
+    const proc = Bun.spawn(cliArgv("hook", "--agent", agent), {
       env: { ...process.env, ANYNOTATE_HOME: home },
       stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: "/a" })),
       stdout: "pipe",
@@ -43,7 +44,7 @@ test("hook --agent accepts any valid agent name and ignores an invalid one", asy
 });
 
 const cli = async (args: string[], env: Record<string, string> = {}) => {
-  const proc = Bun.spawn([join(import.meta.dir, "../bin/anynotate"), ...args], {
+  const proc = Bun.spawn(cliArgv(...args), {
     env: { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_RETENTION_DAYS: "", ...env },
     stdout: "pipe",
     stderr: "pipe",
@@ -58,7 +59,7 @@ test("retention prints the effective setting and its source, and sets it in sett
   writeFileSync(join(home, "settings.json"), JSON.stringify({ other: 1 }));
   expect((await cli(["retention", "7"])).out).toBe("retention set to 7 days (settings.json)\n");
   expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8"))).toEqual({ other: 1, retentionDays: 7 });
-  expect(statSync(join(home, "settings.json")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(home, "settings.json")).mode & 0o777).toBe(0o600);
   expect((await cli(["retention"])).out).toBe("retention 7 days (settings.json)\n");
   expect((await cli(["retention", "off"])).out).toBe("retention set to off (settings.json)\n");
   const bad = await cli(["retention", "soon"]);
@@ -90,9 +91,8 @@ test("retention <days> mentions the env override only when the env value is non-
   expect((await cli(["retention", "7"], { ANYNOTATE_RETENTION_DAYS: "3" })).out).toContain("takes precedence");
 });
 
-const CLI = join(import.meta.dir, "../src/cli.ts");
 const run = async (args: string[], env: Record<string, string> = {}) => {
-  const proc = Bun.spawn([process.execPath, CLI, ...args], {
+  const proc = Bun.spawn(cliArgv(...args), {
     env: {
       ...process.env,
       ANYNOTATE_HOME: join(home, "data"),
@@ -124,7 +124,7 @@ test("install records the install kind and writes the service without starting i
   const r = await run(["install"]);
   expect(r.code).toBe(0);
   const record = JSON.parse(readFileSync(join(home, "data", "install.json"), "utf8"));
-  expect(record).toMatchObject({ kind: "source", path: join(import.meta.dir, ".."), version: pkg.version, platform: process.platform });
+  expect(record).toMatchObject({ kind: "source", path: REPO, version: pkg.version, platform: process.platform });
   expect(r.out).toContain("would run: ");
   expect(r.out).not.toMatch(/^ran: /m);
 });
@@ -156,6 +156,15 @@ test("a refused --purge exits non-zero and keeps the data dir", async () => {
   expect(r.code).toBe(1);
   expect(r.out).toContain(`refused to delete ${join(home, "data")}`);
   expect(existsSync(join(home, "data"))).toBe(true);
+});
+
+test("uninstall --purge deletes an installed data dir that holds a token", async () => {
+  await run(["install"]);
+  writeFileSync(join(home, "data", "token"), "secret\n");
+  const r = await run(["uninstall", "--purge"]);
+  expect(r.out).not.toContain("refused");
+  expect(r.code).toBe(0);
+  expect(existsSync(join(home, "data"))).toBe(false);
 });
 
 test("uninstall rejects unknown flags", async () => {

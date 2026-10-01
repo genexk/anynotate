@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import { applyInstall, type InstallOptions, planInstall } from "../src/agent/install";
 import type { InstallKind, InstallRecord } from "../src/agent/installkind";
 import { applyUninstall, planUninstall, type UninstallOptions, type UninstallStep } from "../src/agent/uninstall";
 import type { Exec } from "../src/platform/exec";
+
+// Plans for macOS and Linux build paths with posix.join whatever the host, so the expectations do too.
+const { join } = posix;
+const isWindows = process.platform === "win32";
+// Applying a macOS or Linux install creates symlinks and sets modes, which only a POSIX host can do.
+const posixOnly = test.skipIf(isWindows);
+const windowsOnly = test.skipIf(!isWindows);
+const dirLink = (target: string, path: string) => symlinkSync(target, path, isWindows ? "junction" : undefined);
 
 let home: string;
 let calls: { argv: string[]; env?: Record<string, string> }[];
@@ -59,7 +67,7 @@ const seedSettings = () => {
   writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ theme: "dark", hooks: { UserPromptSubmit: [{ hooks: [otherHook] }], Stop: [{ hooks: [otherHook] }] } }));
 };
 
-test("uninstall reverses a source install on macOS and keeps the data dir", () => {
+posixOnly("uninstall reverses a source install on macOS and keeps the data dir", () => {
   seedSettings();
   install();
   const data = join(home, ".anynotate");
@@ -94,7 +102,7 @@ test("uninstall removes the legacy bare hook and old absolute paths, nothing els
   expect(JSON.parse(readFileSync(join(home, ".claude/settings.json"), "utf8")).hooks).toEqual({ UserPromptSubmit: [{ hooks: [otherHook] }] });
 });
 
-test("a dry run lists the removals and changes nothing", () => {
+posixOnly("a dry run lists the removals and changes nothing", () => {
   seedSettings();
   install();
   const before = readFileSync(join(home, ".claude/settings.json"), "utf8");
@@ -110,7 +118,7 @@ test("a dry run lists the removals and changes nothing", () => {
   expect(log.at(-1)).toBe("Dry run: nothing was changed.");
 });
 
-test("--purge deletes the data dir when it holds a token", () => {
+posixOnly("--purge deletes the data dir when it holds a token", () => {
   install();
   writeFileSync(join(home, ".anynotate/token"), "secret\n");
   const log = applyUninstall(plan({ purge: true }), fakeExec, false);
@@ -118,7 +126,7 @@ test("--purge deletes the data dir when it holds a token", () => {
   expect(log.at(-1)).toBe(`Anynotate removed, including ${join(home, ".anynotate")}.`);
 });
 
-test("--purge follows ANYNOTATE_HOME", () => {
+posixOnly("--purge follows ANYNOTATE_HOME", () => {
   const data = join(home, "elsewhere");
   install({ env: { ANYNOTATE_HOME: data } });
   writeFileSync(join(data, "token"), "secret\n");
@@ -127,7 +135,7 @@ test("--purge follows ANYNOTATE_HOME", () => {
   expect(existsSync(home)).toBe(true);
 });
 
-test("--purge refuses a data dir without a token", () => {
+posixOnly("--purge refuses a data dir without a token", () => {
   install();
   const log = applyUninstall(plan({ purge: true }), fakeExec, false);
   expect(existsSync(join(home, ".anynotate/origins"))).toBe(true);
@@ -139,7 +147,7 @@ test("--purge refuses a data dir that is a symlink and leaves its target alone",
   const real = join(home, "real");
   mkdirSync(real);
   writeFileSync(join(real, "token"), "secret\n");
-  symlinkSync(real, join(home, ".anynotate"));
+  dirLink(real, join(home, ".anynotate"));
   const log = applyUninstall(plan({ purge: true }), fakeExec, false);
   expect(existsSync(join(real, "token"))).toBe(true);
   expect(lstatSync(join(home, ".anynotate")).isSymbolicLink()).toBe(true);
@@ -153,7 +161,7 @@ test("--purge refuses the home directory itself", () => {
   expect(log.some((l) => l.startsWith(`refused to delete ${home}`))).toBe(true);
 });
 
-test("uninstall is idempotent: a second run, or one with nothing installed, succeeds", () => {
+posixOnly("uninstall is idempotent: a second run, or one with nothing installed, succeeds", () => {
   install();
   applyUninstall(plan(), fakeExec, false);
   const failing: Exec = (argv) => ({ code: 5, stdout: "", stderr: "Boot-out failed: 3: No such process" });
@@ -163,7 +171,7 @@ test("uninstall is idempotent: a second run, or one with nothing installed, succ
   expect(existsSync(join(home, ".claude"))).toBe(true);
 });
 
-test("a bin symlink that points outside the clone, or a regular file, is left alone", () => {
+posixOnly("a bin symlink that points outside the clone, or a regular file, is left alone", () => {
   mkdirSync(join(home, ".local/bin"), { recursive: true });
   symlinkSync("/somewhere/else/anynotate", join(home, ".local/bin/anynotate"));
   const log = applyUninstall(plan(), fakeExec, false);
@@ -175,7 +183,7 @@ test("a bin symlink that points outside the clone, or a regular file, is left al
   expect(existsSync(join(home, ".local/bin/anynotate"))).toBe(true);
 });
 
-test("a Linux binary install with user systemd: unit disabled and removed, binary deleted", () => {
+posixOnly("a Linux binary install with user systemd: unit disabled and removed, binary deleted", () => {
   const exe = join(home, ".local/bin/anynotate");
   const bin: InstallKind = { kind: "binary", exe };
   mkdirSync(join(home, ".local/bin"), { recursive: true });
@@ -311,13 +319,13 @@ test("--purge refuses home reached through another path", () => {
   mkdirSync(real);
   writeFileSync(join(real, "token"), "x");
   const link = join(home, "link");
-  symlinkSync(real, link);
+  dirLink(real, link);
   const log = applyUninstall(plan({ home: link, env: { ANYNOTATE_HOME: real }, purge: true }), fakeExec, false);
   expect(existsSync(join(real, "token"))).toBe(true);
   expect(log.some((l) => l.startsWith(`refused to delete ${real}`))).toBe(true);
 });
 
-test("--purge refuses a custom data dir holding anything anynotate didn't write", () => {
+posixOnly("--purge refuses a custom data dir holding anything anynotate didn't write", () => {
   const data = join(home, "elsewhere");
   install({ env: { ANYNOTATE_HOME: data } });
   writeFileSync(join(data, "token"), "secret\n");
@@ -335,11 +343,42 @@ test("--purge accepts a custom data dir with only anynotate's files, including t
   expect(existsSync(data)).toBe(false);
 });
 
-test("uninstall backs settings up under its own suffix, leaving install's backup alone", () => {
+posixOnly("uninstall backs settings up under its own suffix, leaving install's backup alone", () => {
   seedSettings();
   install();
   writeFileSync(join(home, ".claude/settings.json.bak-anynotate"), "install's backup");
   applyUninstall(plan(), fakeExec, false);
   expect(readFileSync(join(home, ".claude/settings.json.bak-anynotate"), "utf8")).toBe("install's backup");
   expect(JSON.parse(readFileSync(join(home, ".claude/settings.json.bak-anynotate-uninstall"), "utf8")).hooks.UserPromptSubmit).toHaveLength(2);
+});
+
+test("--purge deletes an ordinary data dir holding a token, on any host", () => {
+  const data = join(home, ".anynotate");
+  mkdirSync(join(data, "inbox"), { recursive: true });
+  writeFileSync(join(data, "token"), "secret\n");
+  const log = applyUninstall(plan({ purge: true }), fakeExec, false);
+  expect(existsSync(data)).toBe(false);
+  expect(log.at(-1)).toBe(`Anynotate removed, including ${data}.`);
+});
+
+windowsOnly("on Windows, uninstall reverses a source install and --purge deletes the data dir", () => {
+  const env = { LOCALAPPDATA: win32.join(home, "AppData", "Local") };
+  const kind: InstallKind = { kind: "source", repo: process.cwd(), bun: process.execPath };
+  seedSettings();
+  const seeded = JSON.parse(readFileSync(win32.join(home, ".claude", "settings.json"), "utf8"));
+  install({ platform: "win32", env, kind });
+  const data = win32.join(home, ".anynotate");
+  const shim = win32.join(env.LOCALAPPDATA, "anynotate", "bin", "anynotate.cmd");
+  writeFileSync(win32.join(data, "token"), "secret\n");
+  expect(existsSync(shim)).toBe(true);
+  expect(existsSync(win32.join(data, "install.json"))).toBe(true);
+
+  const steps = planUninstall({ platform: "win32", home, env, record: record(kind, "win32"), kind, purge: true, uid: 0, hasUserSystemd: false });
+  const log = applyUninstall(steps, fakeExec, false);
+  expect(log.filter((l) => l.startsWith("failed") || l.startsWith("refused"))).toEqual([]);
+  expect(existsSync(shim)).toBe(false);
+  expect(existsSync(data)).toBe(false);
+  expect(JSON.parse(readFileSync(win32.join(home, ".claude", "settings.json"), "utf8"))).toEqual(seeded);
+  expect(argvs().some((a) => a[0] === "reg" && a[1] === "delete")).toBe(true);
+  expect(log.at(-1)).toBe(`Anynotate removed, including ${data}.`);
 });

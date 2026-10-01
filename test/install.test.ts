@@ -2,10 +2,17 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 const ALL = () => true;
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import { addHook, applyInstall, extensionOrigins, isAnynotateHook, type InstallOptions, type InstallStep, planInstall } from "../src/agent/install";
 import type { InstallKind } from "../src/agent/installkind";
 import type { Exec } from "../src/platform/exec";
+
+// Plans for macOS and Linux build paths with posix.join whatever the host, so the expectations do too.
+const { join } = posix;
+const isWindows = process.platform === "win32";
+// Applying a macOS or Linux plan creates symlinks and sets modes, which only a POSIX host can do.
+const posixOnly = test.skipIf(isWindows);
+const windowsOnly = test.skipIf(!isWindows);
 
 let home: string;
 let calls: string[][];
@@ -16,7 +23,7 @@ beforeEach(() => {
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 const BUN = "/opt/bun/bin/bun";
-const REPO = process.cwd();
+const REPO = process.cwd().replaceAll("\\", "/");
 const LAUNCHER = join(REPO, "bin/anynotate");
 const src = (repo = REPO): InstallKind => ({ kind: "source", repo, bun: BUN });
 const CMD = (agent: string, repo = REPO) => `${BUN} ${repo}/src/cli.ts hook --agent ${agent}`;
@@ -75,7 +82,7 @@ test("planInstall targets Claude and Codex when installed, the Gemini cleanup, l
   expect(steps[1]!.content).toBe("/repo/bin/anynotate");
 });
 
-test("dry-run writes nothing; apply merges and backs up", () => {
+posixOnly("dry-run writes nothing; apply merges and backs up", () => {
   mkdirSync(join(home, ".claude"), { recursive: true });
   writeFileSync(join(home, ".claude/settings.json"), JSON.stringify({ theme: "dark" }));
   const steps = planFor();
@@ -109,7 +116,7 @@ test("addHook refuses a non-array hooks[event] instead of throwing", () => {
   expect(addHook([], "UserPromptSubmit", "c").unmergeable).toBe(true);
 });
 
-test("a JSONC settings file is skipped untouched while the others still merge", () => {
+posixOnly("a JSONC settings file is skipped untouched while the others still merge", () => {
   const jsonc = '{\n  // user comment\n  "theme": "dark"\n}\n';
   put(".codex/hooks.json", jsonc);
   for (const dry of [true, false]) {
@@ -124,7 +131,7 @@ test("a JSONC settings file is skipped untouched while the others still merge", 
   expect(existsSync(join(home, "Library/LaunchAgents/dev.anynotate.bridge.plist"))).toBe(true);
 });
 
-test("a non-array hooks entry is skipped and the file left unchanged", () => {
+posixOnly("a non-array hooks entry is skipped and the file left unchanged", () => {
   const body = JSON.stringify({ hooks: { UserPromptSubmit: {} } });
   put(".claude/settings.json", body);
   const log = apply(plan(), false);
@@ -136,14 +143,14 @@ test("a non-array hooks entry is skipped and the file left unchanged", () => {
 const binLink = () => join(home, ".local/bin/anynotate");
 const linkLine = (log: string[]) => log.find((l) => l.includes(binLink()));
 
-test("bin symlink already pointing at anynotateBin is ok", () => {
+posixOnly("bin symlink already pointing at anynotateBin is ok", () => {
   mkdirSync(join(home, ".local/bin"), { recursive: true });
   symlinkSync(LAUNCHER, binLink());
   for (const dry of [true, false]) expect(linkLine(apply(plan(), dry))).toBe(`ok      ${binLink()}`);
   expect(readlinkSync(binLink())).toBe(LAUNCHER);
 });
 
-test("bin symlink pointing elsewhere is replaced", () => {
+posixOnly("bin symlink pointing elsewhere is replaced", () => {
   mkdirSync(join(home, ".local/bin"), { recursive: true });
   symlinkSync("/old/anynotate", binLink());
   expect(linkLine(apply(plan(), true))).toBe(`would link ${binLink()} → ${LAUNCHER}`);
@@ -152,7 +159,7 @@ test("bin symlink pointing elsewhere is replaced", () => {
   expect(readlinkSync(binLink())).toBe(LAUNCHER);
 });
 
-test("a regular file or dir at the bin path is never removed", () => {
+posixOnly("a regular file or dir at the bin path is never removed", () => {
   put(".local/bin/anynotate", "mine");
   for (const dry of [true, false]) {
     expect(linkLine(apply(plan(), dry))).toBe(`skip    ${binLink()} (exists and is not a symlink)`);
@@ -164,7 +171,7 @@ test("a regular file or dir at the bin path is never removed", () => {
   expect(lstatSync(binLink()).isDirectory()).toBe(true);
 });
 
-test("a differing file is backed up before it is overwritten", () => {
+posixOnly("a differing file is backed up before it is overwritten", () => {
   put(".claude/skills/annotations/SKILL.md", "old skill");
   const skill = join(home, ".claude/skills/annotations/SKILL.md");
   apply(plan(), true);
@@ -175,7 +182,7 @@ test("a differing file is backed up before it is overwritten", () => {
   expect(existsSync(join(home, ".codex/skills/annotations/SKILL.md.bak-anynotate"))).toBe(false);
 });
 
-test("the plist's log dir is created private, and an open one is tightened", () => {
+posixOnly("the plist's log dir is created private, and an open one is tightened", () => {
   mkdirSync(join(home, ".anynotate"), { mode: 0o755 });
   chmodSync(join(home, ".anynotate"), 0o755);
   expect(apply(plan(), true)).toContain(`would chmod 700 ${join(home, ".anynotate")}`);
@@ -187,7 +194,7 @@ test("the plist's log dir is created private, and an open one is tightened", () 
 
 const whichOnly = (...clis: string[]) => (cli: string) => clis.includes(cli);
 
-test("a CLI that is not installed is skipped and none of its files are created", () => {
+posixOnly("a CLI that is not installed is skipped and none of its files are created", () => {
   for (const dry of [true, false]) {
     const log = apply(plan(whichOnly("claude")), dry);
     expect(log).toContain("skip    codex (not installed)");
@@ -214,14 +221,14 @@ const geminiSettings = () => join(home, ".gemini/settings.json");
 const geminiToml = () => join(home, ".gemini/commands/annotations.toml");
 const tomlAsset = () => readFileSync(join(process.cwd(), "assets/gemini/annotations.toml"), "utf8");
 
-test("the installer no longer adds anything for Gemini", () => {
+posixOnly("the installer no longer adds anything for Gemini", () => {
   mkdirSync(join(home, ".gemini"));
   apply(plan(), false);
   expect(existsSync(geminiSettings())).toBe(false);
   expect(existsSync(geminiToml())).toBe(false);
 });
 
-test("an old anynotate Gemini hook is removed with a backup, leaving the user's other hooks", () => {
+posixOnly("an old anynotate Gemini hook is removed with a backup, leaving the user's other hooks", () => {
   const before = { theme: "dark", hooks: { BeforeAgent: [
     { hooks: [{ type: "command", command: "mine" }] },
     { hooks: [{ type: "command", command: GEMINI_HOOK }] },
@@ -238,7 +245,7 @@ test("an old anynotate Gemini hook is removed with a backup, leaving the user's 
   expect(apply(plan(), false).some((l) => l.includes(".gemini"))).toBe(false);
 });
 
-test("an emptied BeforeAgent list is dropped, and Gemini settings without our hook are left alone", () => {
+posixOnly("an emptied BeforeAgent list is dropped, and Gemini settings without our hook are left alone", () => {
   put(".gemini/settings.json", JSON.stringify({ hooks: { BeforeAgent: [{ hooks: [{ type: "command", command: GEMINI_HOOK }] }] } }));
   apply(plan(), false);
   expect(JSON.parse(readFileSync(geminiSettings(), "utf8"))).toEqual({ hooks: {} });
@@ -250,14 +257,14 @@ test("an emptied BeforeAgent list is dropped, and Gemini settings without our ho
   expect(existsSync(`${geminiSettings()}.bak-anynotate`)).toBe(false);
 });
 
-test("an unparseable Gemini settings file holding our hook is reported, not rewritten", () => {
+posixOnly("an unparseable Gemini settings file holding our hook is reported, not rewritten", () => {
   const jsonc = `{\n  // mine\n  "hooks": { "BeforeAgent": [{ "hooks": [{ "command": "${GEMINI_HOOK}" }] }] }\n}\n`;
   put(".gemini/settings.json", jsonc);
   expect(apply(plan(), false)).toContain(`skip    ${geminiSettings()} (not valid JSON — remove "${GEMINI_HOOK}" by hand)`);
   expect(readFileSync(geminiSettings(), "utf8")).toBe(jsonc);
 });
 
-test("our Gemini command file is removed; one the user changed is kept", () => {
+posixOnly("our Gemini command file is removed; one the user changed is kept", () => {
   put(".gemini/commands/annotations.toml", tomlAsset());
   expect(apply(plan(), true)).toContain(`would remove ${geminiToml()}`);
   expect(existsSync(geminiToml())).toBe(true);
@@ -289,7 +296,7 @@ test("extensionOrigins keeps valid ids in file order and drops the rest", () => 
   }
 });
 
-test("install pre-allows every pinned extension origin, once", () => {
+posixOnly("install pre-allows every pinned extension origin, once", () => {
   expect(EXT_ORIGIN).toMatch(/^chrome-extension:\/\/[a-p]{32}$/);
   expect(apply(plan(), true)).toContain(`would add origin ${EXT_ORIGIN}`);
   expect(existsSync(originsFile())).toBe(false);
@@ -300,7 +307,7 @@ test("install pre-allows every pinned extension origin, once", () => {
   expect(readFileSync(originsFile(), "utf8")).toBe(`${EXT_ORIGIN}\n`);
 });
 
-test("origins already allowed are kept when the extension's is added", () => {
+posixOnly("origins already allowed are kept when the extension's is added", () => {
   const other = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
   mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
   writeFileSync(originsFile(), `${other}\n`, { mode: 0o600 });
@@ -308,7 +315,7 @@ test("origins already allowed are kept when the extension's is added", () => {
   expect(readFileSync(originsFile(), "utf8")).toBe(`${other}\n${EXT_ORIGIN}\n`);
 });
 
-test("without a readable extension-ids.json the origin step is skipped", () => {
+posixOnly("without a readable extension-ids.json the origin step is skipped", () => {
   const log = apply(planFor({ kind: src("/nonexistent-repo") }), false);
   expect(log).toContain("skip    origin (no extension id in /nonexistent-repo/assets/extension-ids.json)");
   expect(existsSync(originsFile())).toBe(false);
@@ -318,13 +325,13 @@ const wrapperPath = () => join(home, ".anynotate/native-host");
 const manifestPath = () => join(home, "Library/Application Support/Google/Chrome/NativeMessagingHosts/dev.anynotate.host.json");
 const hostPlan = () => planFor();
 
-test("install writes the native-host wrapper owner-only with the absolute bun path", () => {
+posixOnly("install writes the native-host wrapper owner-only with the absolute bun path", () => {
   apply(hostPlan(), false);
   expect(readFileSync(wrapperPath(), "utf8")).toBe(`#!/bin/sh\nexec "${BUN}" "${process.cwd()}/src/cli.ts" native-host "$@"\n`);
   expect(statSync(wrapperPath()).mode & 0o777).toBe(0o700);
 });
 
-test("the host manifest names the wrapper and allows pinned plus added extension ids", () => {
+posixOnly("the host manifest names the wrapper and allows pinned plus added extension ids", () => {
   const dev = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
   mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
   writeFileSync(originsFile(), `${dev}\nhttps://recipes.example.com\n`, { mode: 0o600 });
@@ -341,14 +348,14 @@ test("the host manifest names the wrapper and allows pinned plus added extension
   });
 });
 
-test("the host manifest lists a pinned id once even when the origins file has it", () => {
+posixOnly("the host manifest lists a pinned id once even when the origins file has it", () => {
   mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
   writeFileSync(originsFile(), `${EXT_ORIGIN}\n`, { mode: 0o600 });
   apply(hostPlan(), false);
   expect(JSON.parse(readFileSync(manifestPath(), "utf8")).allowed_origins).toEqual([`${EXT_ORIGIN}/`]);
 });
 
-test("dry-run writes no helper files, and a re-run reports them ok", () => {
+posixOnly("dry-run writes no helper files, and a re-run reports them ok", () => {
   const dry = apply(hostPlan(), true);
   expect(dry).toContain(`would write ${wrapperPath()}`);
   expect(dry).toContain(`would write ${manifestPath()}`);
@@ -362,7 +369,7 @@ test("dry-run writes no helper files, and a re-run reports them ok", () => {
   }
 });
 
-test("a wrapper with the right content but loose permissions is tightened", () => {
+posixOnly("a wrapper with the right content but loose permissions is tightened", () => {
   apply(hostPlan(), false);
   chmodSync(wrapperPath(), 0o755);
   expect(apply(hostPlan(), true)).toContain(`would chmod 700 ${wrapperPath()}`);
@@ -371,13 +378,13 @@ test("a wrapper with the right content but loose permissions is tightened", () =
   expect(statSync(wrapperPath()).mode & 0o777).toBe(0o700);
 });
 
-test("without any extension id the host manifest is skipped", () => {
+posixOnly("without any extension id the host manifest is skipped", () => {
   const log = apply(planFor({ kind: src("/nonexistent-repo") }), false);
   expect(log).toContain(`skip    ${manifestPath()} (no extension id to allow)`);
   expect(existsSync(manifestPath())).toBe(false);
 });
 
-test("the host manifest is also written for Brave when its profile exists, never for absent browsers", () => {
+posixOnly("the host manifest is also written for Brave when its profile exists, never for absent browsers", () => {
   const brave = join(home, "Library/Application Support/BraveSoftware/Brave-Browser");
   mkdirSync(brave, { recursive: true });
   apply(hostPlan(), false);
@@ -389,7 +396,7 @@ test("the host manifest is also written for Brave when its profile exists, never
 
 const BARE = (agent: string) => `anynotate hook --agent ${agent}`;
 
-test("a reinstall replaces the bare hook of older versions in place instead of adding a second one", () => {
+posixOnly("a reinstall replaces the bare hook of older versions in place instead of adding a second one", () => {
   put(".claude/settings.json", JSON.stringify({ hooks: { UserPromptSubmit: [
     { hooks: [{ type: "command", command: "mine" }] },
     { hooks: [{ type: "command", command: BARE("claude"), timeout: 5 }] },
@@ -405,7 +412,7 @@ test("a reinstall replaces the bare hook of older versions in place instead of a
   expect(apply(plan(), false)).toContain(`ok      ${join(home, ".claude/settings.json")} (hook present)`);
 });
 
-test("a hook left by a moved clone or binary is replaced, and duplicates collapse to one", () => {
+posixOnly("a hook left by a moved clone or binary is replaced, and duplicates collapse to one", () => {
   put(".codex/hooks.json", JSON.stringify({ hooks: { UserPromptSubmit: [
     { hooks: [{ type: "command", command: CMD("codex", "/old/clone") }] },
     { hooks: [{ type: "command", command: '"/home/me/old bin/anynotate" hook --agent codex' }, { type: "command", command: "other" }] },
@@ -474,9 +481,9 @@ test("a Windows source install puts an anynotate.cmd shim on its bin dir and a .
 });
 
 test("the data dir follows ANYNOTATE_HOME", () => {
-  const steps = planFor({ env: { ANYNOTATE_HOME: join(home, "data") } });
-  expect(steps[0]!.path).toBe(join(home, "data"));
-  expect(steps.at(-2)!.path).toBe(join(home, "data", "install.json"));
+  const steps = planFor({ env: { ANYNOTATE_HOME: "/srv/anynotate" } });
+  expect(steps[0]!.path).toBe("/srv/anynotate");
+  expect(steps.at(-2)!.path).toBe("/srv/anynotate/install.json");
 });
 
 test("a dry run lists the service start commands and runs nothing", () => {
@@ -489,7 +496,7 @@ test("a dry run lists the service start commands and runs nothing", () => {
   expect(existsSync(join(home, ".anynotate"))).toBe(false);
 });
 
-test("apply writes install.json and starts the service", () => {
+posixOnly("apply writes install.json and starts the service", () => {
   apply(plan(), false);
   expect(JSON.parse(readFileSync(join(home, ".anynotate/install.json"), "utf8"))).toEqual({
     kind: "source", path: REPO, version: "0.4.0", installedAt: "2026-10-01T12:00:00.000Z", platform: "darwin",
@@ -505,13 +512,13 @@ test("apply writes install.json and starts the service", () => {
   expect(plist).toContain(`<string>${join(home, ".anynotate/bridge.log")}</string>`);
 });
 
-test("a failed start is reported in the log", () => {
+posixOnly("a failed start is reported in the log", () => {
   const failing: Exec = (argv) => ({ code: argv[1] === "kickstart" ? 3 : 0, stdout: "", stderr: argv[1] === "kickstart" ? "boom" : "" });
   const log = applyInstall(plan(), false, { exec: failing, platform: "darwin" });
   expect(log.at(-1)).toBe("failed (exit 3): launchctl kickstart -k gui/501/dev.anynotate.bridge: boom");
 });
 
-test("a linux install with user systemd writes the unit and enables it", () => {
+posixOnly("a linux install with user systemd writes the unit and enables it", () => {
   const steps = planFor({ platform: "linux", hasUserSystemd: true });
   applyInstall(steps, false, { exec: fakeExec, platform: "linux" });
   expect(readFileSync(join(home, ".config/systemd/user/anynotate-bridge.service"), "utf8")).toContain(`ExecStart=${BUN} ${REPO}/src/cli.ts bridge`);
@@ -519,7 +526,7 @@ test("a linux install with user systemd writes the unit and enables it", () => {
   expect(existsSync(join(home, ".config/google-chrome/NativeMessagingHosts/dev.anynotate.host.json"))).toBe(true);
 });
 
-test("externalDryRun writes the files but starts nothing", () => {
+posixOnly("externalDryRun writes the files but starts nothing", () => {
   const log = applyInstall(plan(), false, { exec: fakeExec, platform: "darwin", externalDryRun: true });
   expect(calls).toEqual([]);
   expect(log).toContain("would run: launchctl kickstart -k gui/501/dev.anynotate.bridge");
@@ -534,7 +541,7 @@ test("a utf16le-bom file is written with a BOM and compared byte for byte", () =
   expect(apply([step], false)).toEqual([`ok      ${p}`]);
 });
 
-test("without an exec, applying a plan refuses to run commands rather than touching the real service", () => {
+posixOnly("without an exec, applying a plan refuses to run commands rather than touching the real service", () => {
   expect(() => applyInstall(plan(), false, { platform: "darwin" })).toThrow(/no exec/);
 });
 
@@ -578,4 +585,24 @@ test("isAnynotateHook matches only a command that is solely our executable", () 
     "`touch x`/anynotate hook --agent claude",
     "/opt/bun/bin/bun /x/src/cli.ts;rm hook --agent claude",
   ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, false]);
+});
+
+windowsOnly("on Windows a source install writes the hooks, the .cmd shim and host wrapper, the manifest and bridge.vbs", () => {
+  const env = { LOCALAPPDATA: win32.join(home, "AppData", "Local") };
+  const kind: InstallKind = { kind: "source", repo: process.cwd(), bun: process.execPath };
+  const steps = planFor({ platform: "win32", env, kind });
+  const log = applyInstall(steps, false, { exec: fakeExec, platform: "win32" });
+  expect(log.filter((l) => l.startsWith("failed"))).toEqual([]);
+  const data = win32.join(home, ".anynotate");
+  const hook = JSON.parse(readFileSync(win32.join(home, ".claude", "settings.json"), "utf8")).hooks.UserPromptSubmit[0].hooks[0].command;
+  expect(hook).toBe(`${[process.execPath, win32.join(process.cwd(), "src", "cli.ts")].map((a) => a.replaceAll("\\", "/")).map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")} hook --agent claude`);
+  expect(readFileSync(win32.join(env.LOCALAPPDATA, "anynotate", "bin", "anynotate.cmd"), "utf8")).toEndWith(" %*\r\n");
+  expect(existsSync(win32.join(data, "native-host.cmd"))).toBe(true);
+  expect(JSON.parse(readFileSync(win32.join(data, "dev.anynotate.host.json"), "utf8")).path).toBe(win32.join(data, "native-host.cmd"));
+  expect([...readFileSync(win32.join(data, "bridge.vbs")).subarray(0, 2)]).toEqual([0xff, 0xfe]);
+  expect(JSON.parse(readFileSync(win32.join(data, "install.json"), "utf8"))).toMatchObject({ kind: "source", platform: "win32" });
+  expect(calls.filter((c) => c[0] === "reg" && c[1] === "add").length).toBeGreaterThanOrEqual(4);
+  calls = [];
+  const again = applyInstall(steps, false, { exec: fakeExec, platform: "win32" });
+  expect(again.filter((l) => (l.startsWith("wrote") && !l.endsWith("install.json")) || l.startsWith("merged"))).toEqual([]);
 });
