@@ -1,5 +1,5 @@
 import { posix, win32 } from "node:path";
-import type { Exec, ExecResult } from "./exec";
+import { type Exec, type ExecResult, regQueryFor } from "./exec";
 import type { Env, Platform } from "./os";
 
 export const LAUNCHD_LABEL = "dev.anynotate.bridge";
@@ -160,12 +160,11 @@ export function planService(o: ServiceOptions): ServicePlan {
 export const detectUserSystemd = (exec: Exec): boolean => exec(["systemctl", "--user", "show-environment"]).code === 0;
 
 // Failures that leave the system in the state the step was after: unloading a service or stopping a bridge that
-// isn't running, deleting a Run value that isn't there. A bootstrap straight after bootout can fail with an I/O
+// isn't running. A bootstrap straight after bootout can fail with an I/O
 // error while launchd finishes tearing down; the kickstart that follows is the step that must succeed.
 export const tolerateNotRunning = (argv: string[], r: ExecResult): boolean =>
   (argv[0] === "launchctl" && (argv[1] === "bootout" || argv[1] === "bootstrap")) ||
-  (argv.at(-2) === "bridge" && argv.at(-1) === "--stop") ||
-  (argv[0] === "reg" && argv[1] === "delete" && /unable to find/i.test(r.stderr + r.stdout));
+  (argv.at(-2) === "bridge" && argv.at(-1) === "--stop");
 
 export function runSteps(
   steps: string[][],
@@ -178,6 +177,11 @@ export function runSteps(
     const line = argv.join(" ");
     if (dryRun) {
       log.push(`would run: ${line}`);
+      continue;
+    }
+    // A registry value that is already gone is skipped; once it is known to exist, any delete failure is a failure.
+    if (argv[0] === "reg" && argv[1] === "delete" && exec(regQueryFor(argv)).code === 1) {
+      log.push(`already gone: ${line}`);
       continue;
     }
     const r = exec(argv);

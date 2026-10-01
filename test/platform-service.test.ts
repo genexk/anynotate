@@ -181,18 +181,27 @@ test("runSteps stops at the first intolerable failure", () => {
   expect(f.calls).toEqual([plan.start[0]!]);
 });
 
-test("runSteps on win32 remove tolerates a stopped bridge and a missing Run value, not other reg errors", () => {
+test("runSteps on win32 remove tolerates a stopped bridge, skips a Run value reg query says is gone, and fails any delete error", () => {
   const plan = planService({ ...WIN, exe: ["C:\\a\\anynotate.exe"] });
-  const [stop, del] = plan.remove.map((s) => s.join(" "));
-  const run = (stderr: string) => {
+  const [stop, del] = plan.remove;
+  const query = ["reg", "query", RUN, "/v", "Anynotate Bridge"];
+  const run = (queryCode: number, deleteCode: number) => {
     const calls: string[][] = [];
-    const exec: Exec = (argv) => (calls.push(argv), { code: 1, stdout: "", stderr: argv.join(" ") === del ? stderr : "" });
-    return { ok: runSteps(plan.remove, exec, false).ok, calls };
+    const exec: Exec = (argv) => {
+      calls.push(argv);
+      const code = argv[1] === "query" ? queryCode : argv[1] === "delete" ? deleteCode : 1;
+      return { code, stdout: "", stderr: "ERROR: The system was unable to find the specified registry key or value." };
+    };
+    const r = runSteps(plan.remove, exec, false);
+    return { ok: r.ok, calls, log: r.log };
   };
-  const missing = run("ERROR: The system was unable to find the specified registry key or value.");
-  expect(missing).toEqual({ ok: true, calls: plan.remove });
-  expect(run("ERROR: Access is denied.").ok).toBe(false);
-  expect(stop).toContain("--stop");
+  const gone = run(1, 0);
+  expect(gone.ok).toBe(true);
+  expect(gone.calls).toEqual([stop!, query]);
+  expect(gone.log.at(-1)).toBe(`already gone: ${del!.join(" ")}`);
+  expect(run(0, 0)).toMatchObject({ ok: true, calls: [stop!, query, del!] });
+  expect(run(0, 1).ok).toBe(false);
+  expect(stop!.join(" ")).toContain("--stop");
 });
 
 test("runSteps in dry-run mode only logs", () => {

@@ -172,17 +172,23 @@ test("applyHostSteps writes a manifest, then reports it ok, then removes it", ()
   expect(applyHostSteps([{ kind: "remove-manifest", path }], exec, false)).toEqual([]);
 });
 
-test("reg delete of a missing key counts as removed", () => {
-  for (const msg of ["ERROR: The system was unable to find the specified registry key or value.", "error: UNABLE TO FIND key"]) {
-    const { exec, calls } = fakeExec(() => ({ code: 1, stdout: "", stderr: msg }));
-    const log = applyHostSteps([{ kind: "reg-delete", key: KEYS[2]! }], exec, false);
-    expect(calls).toEqual([["reg", "delete", KEYS[2]!, "/f"]]);
-    expect(log).toHaveLength(1);
-  }
+test("reg delete queries the key first and skips a key that is already gone, whatever the message language", () => {
+  const { exec, calls } = fakeExec((argv) => ({ code: argv[1] === "query" ? 1 : 0, stdout: "", stderr: "FEHLER: nicht gefunden" }));
+  const log = applyHostSteps([{ kind: "reg-delete", key: KEYS[2]! }], exec, false);
+  expect(calls).toEqual([["reg", "query", KEYS[2]!]]);
+  expect(log).toEqual([`ok      ${KEYS[2]!} (already gone)`]);
+});
+
+test("reg delete of a present key deletes it, and any delete failure throws", () => {
+  const ok = fakeExec(() => ({ code: 0, stdout: "", stderr: "" }));
+  expect(applyHostSteps([{ kind: "reg-delete", key: KEYS[2]! }], ok.exec, false)).toEqual([`unregistered ${KEYS[2]!}`]);
+  expect(ok.calls).toEqual([["reg", "query", KEYS[2]!], ["reg", "delete", KEYS[2]!, "/f"]]);
+  const bad = fakeExec((argv) => ({ code: argv[1] === "query" ? 0 : 1, stdout: "", stderr: "ERROR: The system was unable to find the specified registry key or value." }));
+  expect(() => applyHostSteps([{ kind: "reg-delete", key: KEYS[2]! }], bad.exec, false)).toThrow(/reg delete/);
 });
 
 test("other reg failures throw", () => {
-  const { exec } = fakeExec(() => ({ code: 1, stdout: "", stderr: "ERROR: Access is denied." }));
+  const { exec } = fakeExec((argv) => ({ code: argv[1] === "query" ? 0 : 1, stdout: "", stderr: "ERROR: Access is denied." }));
   expect(() => applyHostSteps([{ kind: "reg-delete", key: KEYS[0]! }], exec, false)).toThrow(/Access is denied/);
   expect(() => applyHostSteps([{ kind: "reg-add", key: KEYS[0]!, manifestPath: WIN_MANIFEST }], exec, false)).toThrow(/Access is denied/);
 });

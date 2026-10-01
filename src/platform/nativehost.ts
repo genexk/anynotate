@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, posix, win32 } from "node:path";
-import type { Exec } from "./exec";
+import { type Exec, regQueryFor } from "./exec";
 import { BROWSERS, browserConfigRoot, browserRegistryKey, type Env, type Platform } from "./os";
 
 export const HOST_NAME = "dev.anynotate.host";
@@ -72,12 +72,9 @@ export function sourceHostWrapper(platform: Platform, bun: string, repo: string,
 
 export const isRegistryStep = (h: HostStep) => h.kind === "reg-add" || h.kind === "reg-delete";
 
-const missingKey = (out: string) => /unable to find/i.test(out);
-
-function reg(exec: Exec, argv: string[], okIfMissing = false) {
+function reg(exec: Exec, argv: string[]) {
   const r = exec(argv);
-  if (r.code === 0 || (okIfMissing && r.code === 1 && missingKey(r.stdout + r.stderr))) return r.code === 0;
-  throw new Error(`${argv.join(" ")} failed (${r.code}): ${(r.stderr || r.stdout).trim()}`);
+  if (r.code !== 0) throw new Error(`${argv.join(" ")} failed (${r.code}): ${(r.stderr || r.stdout).trim()}`);
 }
 
 export function applyHostSteps(steps: HostStep[], exec: Exec, dryRun: boolean): string[] {
@@ -107,7 +104,10 @@ export function applyHostSteps(steps: HostStep[], exec: Exec, dryRun: boolean): 
       }
       case "reg-delete": {
         if (dryRun) { log.push(`would unregister ${s.key}`); break; }
-        log.push(reg(exec, ["reg", "delete", s.key, "/f"], true) ? `unregistered ${s.key}` : `ok      ${s.key} (not registered)`);
+        const argv = ["reg", "delete", s.key, "/f"];
+        if (exec(regQueryFor(argv)).code === 1) { log.push(`ok      ${s.key} (already gone)`); break; }
+        reg(exec, argv);
+        log.push(`unregistered ${s.key}`);
         break;
       }
     }

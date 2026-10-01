@@ -1,4 +1,8 @@
 export type ExecResult = { code: number; stdout: string; stderr: string };
+// The `reg query` for what a `reg delete` argv would remove. reg.exe localizes its messages, so whether a key or value
+// exists is judged by this command's exit code (1 when it is absent), never by its text.
+export const regQueryFor = (deleteArgv: string[]) => ["reg", "query", ...deleteArgv.slice(2).filter((a) => a.toLowerCase() !== "/f")];
+
 // env adds to (never replaces) this process's environment.
 export type Exec = (argv: string[], cwd?: string, env?: Record<string, string>) => ExecResult;
 
