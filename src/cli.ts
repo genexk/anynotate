@@ -108,6 +108,10 @@ switch (cmd) {
     console.log(loadOrCreateToken());
     break;
   case "install": {
+    if (rest.some((a) => a !== "--dry-run")) {
+      console.error("usage: anynotate install [--dry-run]");
+      process.exit(1);
+    }
     const dry = rest.includes("--dry-run");
     const platform = currentPlatform();
     const steps = planInstall({
