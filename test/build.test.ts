@@ -17,7 +17,7 @@ test("the release is 0.4.0", () => {
 });
 
 test("every target's file is the asset name self-update downloads", () => {
-  expect(TARGETS.map((t) => t.bun)).toEqual(["bun-darwin-arm64", "bun-darwin-x64", "bun-linux-x64", "bun-linux-arm64", "bun-windows-x64"]);
+  expect(TARGETS.map((t) => t.bun)).toEqual(["bun-darwin-arm64", "bun-darwin-x64-baseline", "bun-linux-x64-baseline", "bun-linux-arm64", "bun-windows-x64-baseline"]);
   for (const t of TARGETS) expect(outfileFor(t)).toBe(assetName(t.platform, t.arch));
 });
 

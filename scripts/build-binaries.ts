@@ -11,7 +11,7 @@ const target = (os: Target["os"], arch: Target["arch"]): Target => ({
   os,
   arch,
   platform: os === "windows" ? "win32" : os,
-  bun: `bun-${os}-${arch}`,
+  bun: `bun-${os}-${arch}${arch === "x64" ? "-baseline" : ""}`,
 });
 
 export const TARGETS: Target[] = [
