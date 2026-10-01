@@ -55,6 +55,10 @@ const externalDryRun = process.env.ANYNOTATE_EXTERNAL_DRYRUN === "1";
 const exec = externalDryRun ? dryRunExec : platformExec;
 
 switch (cmd) {
+  case "--version":
+  case "version":
+    console.log(pkg.version);
+    break;
   case "bridge": {
     const control: Control = {
       dataDir: anynotateHome(),
@@ -278,6 +282,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <--version|bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

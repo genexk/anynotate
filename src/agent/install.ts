@@ -1,11 +1,12 @@
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, posix, resolve, win32 } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import { addOrigin, ORIGIN_RE, readOrigins } from "../bridge/origins";
 import type { Exec } from "../platform/exec";
 import { makePrivateDir, writePrivateFile } from "../platform/files";
 import { applyHostSteps, cmdArgv, type HostStep, isRegistryStep, planNativeHost, sourceHostWrapper } from "../platform/nativehost";
 import { currentPlatform, type Env, installPaths, pathFor, type Platform } from "../platform/os";
 import { LAUNCHD_LABEL, planService, runSteps, type ServiceFile } from "../platform/service";
+import { EMBEDDED_ASSETS } from "./assets";
 import { commandArgv, formatInstallRecord, INSTALL_RECORD, type InstallKind, type InstallRecord, quoteArgv } from "./installkind";
 
 export type InstallStep = {
@@ -104,15 +105,19 @@ export const HOOKED_CLIS = [
 ] as const;
 
 // Extension ids the installer pre-allows: the pinned dev id now, the Chrome Web Store id once it exists.
-export function extensionOrigins(repo: string): string[] {
+// Without a repo the copy embedded at build time is used.
+export function extensionOrigins(repo?: string): string[] {
   try {
-    const ids: unknown = JSON.parse(readFileSync(join(repo, "assets/extension-ids.json"), "utf8"));
+    const ids: unknown = JSON.parse(readAsset(repo, "assets/extension-ids.json"));
     if (!Array.isArray(ids)) return [];
     return ids.filter((id): id is string => typeof id === "string").map((id) => `chrome-extension://${id}`).filter((o) => ORIGIN_RE.test(o));
   } catch {
     return [];
   }
 }
+
+const readAsset = (repo: string | undefined, rel: string): string =>
+  repo === undefined ? (EMBEDDED_ASSETS[rel] ?? "") : readFileSync(join(repo, rel), "utf8");
 
 export type InstallOptions = {
   platform?: Platform;
@@ -125,12 +130,10 @@ export type InstallOptions = {
   exists?: (path: string) => boolean;
   which?: (cli: string) => string | null;
   installed?: (cli: string) => boolean;
-  // Where assets/ is read from; defaults to the clone for a source install and this checkout otherwise.
+  // Where assets/ is read from; defaults to the clone for a source install and the embedded copies otherwise.
   assets?: string;
   now?: Date;
 };
-
-const moduleRepo = resolve(import.meta.dir, "..", "..");
 
 // On Windows the path uses forward slashes, which cmd, PowerShell and Git Bash all accept; backslashes would be
 // escapes to the bash some agents run hooks through.
@@ -146,11 +149,11 @@ export function planInstall(o: InstallOptions): InstallStep[] {
   const which = o.which ?? Bun.which;
   const { home, kind } = o;
   const path = pathFor(platform);
-  const assets = o.assets ?? (kind.kind === "source" ? kind.repo : moduleRepo);
+  const assets = o.assets ?? (kind.kind === "source" ? kind.repo : undefined);
   const paths = installPaths(platform, home, env);
   const { dataDir } = paths;
   const isInstalled = o.installed ?? ((cli: string) => which(cli) !== null || exists(path.join(home, `.${cli}`)));
-  const read = (rel: string) => (existsSync(join(assets, rel)) ? readFileSync(join(assets, rel), "utf8") : "");
+  const read = (rel: string) => (assets === undefined || existsSync(join(assets, rel)) ? readAsset(assets, rel) : "");
   const perCli = HOOKED_CLIS.flatMap(({ cli, settings, skill }): InstallStep[] =>
     isInstalled(cli)
       ? [
@@ -203,11 +206,11 @@ function binSteps(platform: Platform, kind: InstallKind, binDir: string, binPath
   return [{ path: binPath, action: "symlink", content: posix.join(kind.repo, "bin", "anynotate") }];
 }
 
-function originSteps(originsPath: string, assets: string): InstallStep[] {
+function originSteps(originsPath: string, assets: string | undefined): InstallStep[] {
   const origins = extensionOrigins(assets);
   return origins.length > 0
     ? origins.map((origin): InstallStep => ({ path: originsPath, action: "origin", content: origin }))
-    : [{ path: "origin", action: "skip", content: `no extension id in ${join(assets, "assets/extension-ids.json")}` }];
+    : [{ path: "origin", action: "skip", content: `no extension id in ${assets === undefined ? "the embedded assets/extension-ids.json" : join(assets, "assets/extension-ids.json")}` }];
 }
 
 // Allows the pinned ids plus any added with `anynotate origin add`, so re-running install picks up a dev id.
@@ -218,7 +221,7 @@ function nativeHostSteps(
   env: Env,
   kind: InstallKind,
   dataDir: string,
-  assets: string,
+  assets: string | undefined,
   exists: (path: string) => boolean,
 ): InstallStep[] {
   const wrapper = kind.kind === "source" ? sourceHostWrapper(platform, kind.bun, kind.repo, dataDir) : null;
