@@ -62,6 +62,11 @@ const record = (kind: InstallKind, platform: InstallRecord["platform"] = "darwin
 const plan = (o: Partial<UninstallOptions> = {}) =>
   planUninstall({ platform: "darwin", home, env: {}, record: record(src), kind: src, purge: false, uid: 501, hasUserSystemd: false, ...o });
 
+// ANYNOTATE_HOME only counts when it is absolute for the plan's platform, so plans that set it to a temp dir target
+// the host.
+const hostPlatform = isWindows ? "win32" : "darwin";
+const hostPlan = (o: Partial<UninstallOptions> = {}) => plan({ platform: hostPlatform, record: record(src, hostPlatform), ...o });
+
 const otherHook = { type: "command", command: "say hello" };
 const seedSettings = () => {
   mkdirSync(join(home, ".claude"), { recursive: true });
@@ -204,9 +209,9 @@ test("--purge refuses a data dir that is a symlink and leaves its target alone",
 
 test("--purge refuses the home directory itself", () => {
   writeFileSync(join(home, "token"), "x");
-  const log = applyUninstall(plan({ env: { ANYNOTATE_HOME: home }, purge: true }), fakeExec, false);
+  const log = applyUninstall(hostPlan({ env: { ANYNOTATE_HOME: home }, purge: true }), fakeExec, false);
   expect(existsSync(join(home, "token"))).toBe(true);
-  expect(log.some((l) => l.startsWith(`refused to delete ${home}`))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${home}: `) && l.includes("home"))).toBe(true);
 });
 
 posixOnly("uninstall is idempotent: a second run, or one with nothing installed, succeeds", () => {
@@ -359,9 +364,9 @@ test("--purge refuses an ancestor of home even when it holds a token", () => {
   const user = join(home, "users", "me");
   mkdirSync(user, { recursive: true });
   writeFileSync(join(home, "users", "token"), "x");
-  const log = applyUninstall(plan({ home: user, env: { ANYNOTATE_HOME: join(home, "users") }, purge: true }), fakeExec, false);
+  const log = applyUninstall(hostPlan({ home: user, env: { ANYNOTATE_HOME: join(home, "users") }, purge: true }), fakeExec, false);
   expect(existsSync(join(home, "users", "token"))).toBe(true);
-  expect(log.some((l) => l.startsWith(`refused to delete ${join(home, "users")}`))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${join(home, "users")}: `) && l.includes("home"))).toBe(true);
 });
 
 test("--purge refuses home reached through another path", () => {
@@ -370,9 +375,9 @@ test("--purge refuses home reached through another path", () => {
   writeFileSync(join(real, "token"), "x");
   const link = join(home, "link");
   dirLink(real, link);
-  const log = applyUninstall(plan({ home: link, env: { ANYNOTATE_HOME: real }, purge: true }), fakeExec, false);
+  const log = applyUninstall(hostPlan({ home: link, env: { ANYNOTATE_HOME: real }, purge: true }), fakeExec, false);
   expect(existsSync(join(real, "token"))).toBe(true);
-  expect(log.some((l) => l.startsWith(`refused to delete ${real}`))).toBe(true);
+  expect(log.some((l) => l.startsWith(`refused to delete ${real}: `) && l.includes("home"))).toBe(true);
 });
 
 posixOnly("--purge refuses a custom data dir holding anything anynotate didn't write", () => {
@@ -389,7 +394,8 @@ test("--purge accepts a custom data dir with only anynotate's files, including t
   const data = join(home, "elsewhere");
   mkdirSync(join(data, "inbox"), { recursive: true });
   for (const f of ["token", "settings.json", "bridge.log", "bridge.pid", "origins", "token.tmp-1-abc", "bridge.vbs.bak-anynotate"]) writeFileSync(join(data, f), "x");
-  applyUninstall(plan({ env: { ANYNOTATE_HOME: data }, purge: true }), fakeExec, false);
+  const log = applyUninstall(hostPlan({ env: { ANYNOTATE_HOME: data }, purge: true }), fakeExec, false);
+  expect(log.filter((l) => l.startsWith("failed") || l.startsWith("refused"))).toEqual([]);
   expect(existsSync(data)).toBe(false);
 });
 
