@@ -21,7 +21,19 @@ export function detectInstallKind(o: { execPath?: string; mainPath?: string } = 
 export const commandArgv = (k: InstallKind): string[] =>
   k.kind === "binary" ? [k.exe] : [k.bun, pathOf(k.repo).join(k.repo, "src", "cli.ts")];
 
-export const quoteArgv = (argv: string[]) => argv.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
+// A command line for an agent's hook. POSIX shells get anything beyond plain path characters single-quoted (where
+// nothing expands); on Windows, where cmd and Git Bash both run it, a path with spaces or cmd metacharacters is
+// double-quoted, since Windows paths can't hold a double quote.
+const POSIX_PLAIN = /^[A-Za-z0-9_./:@%+=,-]+$/;
+const WIN32_QUOTE = /[\s&|<>^%!]/;
+export const quoteArgv = (argv: string[], platform: Platform) =>
+  argv
+    .map((a) =>
+      platform === "win32"
+        ? WIN32_QUOTE.test(a) || a === "" ? `"${a}"` : a
+        : POSIX_PLAIN.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`,
+    )
+    .join(" ");
 
 // path is the binary for a binary install and the clone for a source install.
 export type InstallRecord = { kind: "binary" | "source"; path: string; version: string; installedAt: string; platform: Platform };

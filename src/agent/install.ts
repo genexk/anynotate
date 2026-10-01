@@ -37,18 +37,24 @@ const isObject = (v: unknown): v is Record<string, any> => typeof v === "object"
 // Commands an earlier install wrote for this agent: nothing but our executable followed by ` hook --agent X`. The
 // executable is one token naming anynotate or anynotate.exe (the bare command of older versions, a binary or the
 // clone's launcher, wherever it lived) or bun followed by cli.ts. Compound commands such as `x && anynotate …` are
-// the user's own and never match.
-const TOKEN = String.raw`(?:"[^"]*"|[^\s"]+)`;
-// Shell syntax inside a token (even a quoted one, where $( and ` still expand) makes it something other than a path.
-const SHELL_META = /[;&|`$<>()]/;
-const baseName = (token: string) => token.replace(/^"|"$/g, "").split(/[\\/]/).pop() ?? "";
+// the user's own and never match. A token is single-quoted (POSIX, with '\'' for a quote), double-quoted or bare.
+const TOKEN = String.raw`(?:'(?:[^']|'\\'')*'|"[^"]*"|[^\s"']+)`;
+// Nothing expands inside single quotes. Inside double quotes $ and ` still expand (in bash), and a bare token must
+// hold no shell syntax at all; either makes it something other than a path.
+const BARE_META = /[;&|`$<>()]/;
+const QUOTED_META = /[`$]/;
+const unquote = (token: string) =>
+  token.startsWith("'") ? token.slice(1, -1).replace(/'\\''/g, "'") : token.startsWith('"') ? token.slice(1, -1) : token;
+const isPathToken = (token: string) =>
+  token.startsWith("'") || !(token.startsWith('"') ? QUOTED_META : BARE_META).test(token);
+const baseName = (token: string) => unquote(token).split(/[\\/]/).pop() ?? "";
 
 export function isAnynotateHook(command: unknown, agent: string): boolean {
   if (typeof command !== "string" || !/^[\w.-]+$/.test(agent)) return false;
   const m = new RegExp(`^(${TOKEN})(?: (${TOKEN}))? hook --agent ${agent.replace(/\./g, "\\.")}$`).exec(command);
   if (!m) return false;
   const [, first, second] = m as unknown as [string, string, string | undefined];
-  if ([first, second].some((t) => t !== undefined && SHELL_META.test(t))) return false;
+  if ([first, second].some((t) => t !== undefined && !isPathToken(t))) return false;
   if (second === undefined) return /^anynotate(\.exe)?$/.test(baseName(first));
   return /^bun(\.exe)?$/.test(baseName(first)) && baseName(second) === "cli.ts";
 }
@@ -152,7 +158,7 @@ export type InstallOptions = {
 // escapes to the bash some agents run hooks through.
 export const hookCommand = (kind: InstallKind, agent: string, platform: Platform) => {
   const argv = commandArgv(kind);
-  return `${quoteArgv(platform === "win32" ? argv.map((a) => a.replace(/\\/g, "/")) : argv)} hook --agent ${agent}`;
+  return `${quoteArgv(platform === "win32" ? argv.map((a) => a.replace(/\\/g, "/")) : argv, platform)} hook --agent ${agent}`;
 };
 
 export function planInstall(o: InstallOptions): InstallStep[] {

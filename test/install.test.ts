@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 const ALL = () => true;
 import { posix, win32 } from "node:path";
 import { addHook, applyInstall, extensionOrigins, isAnynotateHook, type InstallOptions, type InstallStep, planInstall } from "../src/agent/install";
-import type { InstallKind } from "../src/agent/installkind";
+import { type InstallKind, quoteArgv } from "../src/agent/installkind";
 import type { Exec } from "../src/platform/exec";
 
 // Plans for macOS and Linux build paths with posix.join whatever the host, so the expectations do too.
@@ -430,11 +430,13 @@ posixOnly("a hook left by a moved clone or binary is replaced, and duplicates co
 const hookOf = (steps: InstallStep[], agent: string) =>
   JSON.parse(steps.find((s) => s.action === "merge-json" && s.content.includes(`"agent":"${agent}"`))!.content).command;
 
-test("hooks name the absolute executable on every OS, quoted only when the path has spaces", () => {
+test("hooks name the absolute executable on every OS, quoted only when the path needs it", () => {
   const linux = planFor({ platform: "linux", home: "/home/me", kind: { kind: "binary", exe: "/home/me/.local/bin/anynotate" } });
   expect(hookOf(linux, "claude")).toBe("/home/me/.local/bin/anynotate hook --agent claude");
   const darwin = planFor({ home: "/Users/me", kind: { kind: "source", repo: "/Users/me/src/anynotate", bun: "/Users/me/.bun/bin/bun" } });
   expect(hookOf(darwin, "codex")).toBe("/Users/me/.bun/bin/bun /Users/me/src/anynotate/src/cli.ts hook --agent codex");
+  const spaced = planFor({ platform: "linux", home: "/home/me", kind: { kind: "binary", exe: "/home/me/my tools/anynotate" } });
+  expect(hookOf(spaced, "claude")).toBe("'/home/me/my tools/anynotate' hook --agent claude");
   const winExe = (home: string) => `${home}\\AppData\\Local\\anynotate\\bin\\anynotate.exe`;
   const win = (home: string) => planFor({ platform: "win32", home, kind: { kind: "binary", exe: winExe(home) } });
   expect(hookOf(win("C:\\Users\\me"), "claude")).toBe("C:/Users/me/AppData/Local/anynotate/bin/anynotate.exe hook --agent claude");
@@ -602,6 +604,10 @@ test("isAnynotateHook matches only a command that is solely our executable", () 
     '"C:\\Users\\Me Me\\anynotate.exe" hook --agent claude',
     "/opt/bun/bin/bun /home/me/src/anynotate/src/cli.ts hook --agent claude",
     '"C:/Program Files/bun/bun.exe" "C:/my src/cli.ts" hook --agent claude',
+    '"C:/Program Files (x86)/anynotate/anynotate.exe" hook --agent claude',
+    "'/home/me/my bin/anynotate' hook --agent claude",
+    "'/home/me/it'\\''s (copy)/anynotate' hook --agent claude",
+    "'/opt/my bun/bun' '/home/me/$src/cli.ts' hook --agent claude",
   ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, true]);
   for (const c of [
     "foo && anynotate hook --agent claude",
@@ -615,6 +621,12 @@ test("isAnynotateHook matches only a command that is solely our executable", () 
     '"$(touch x)/anynotate" hook --agent claude',
     "`touch x`/anynotate hook --agent claude",
     "/opt/bun/bin/bun /x/src/cli.ts;rm hook --agent claude",
+    '"/x/$(id)/anynotate" hook --agent claude',
+    '"/x/`id`/anynotate" hook --agent claude',
+    "'/x/anynotate' ; rm hook --agent claude",
+    "'/x/anynotate hook --agent claude",
+    "'/x/anynotate'x hook --agent claude",
+    "'/x/notanynotate' hook --agent claude",
   ]) expect([c, isAnynotateHook(c, "claude")]).toEqual([c, false]);
 });
 
@@ -626,7 +638,7 @@ windowsOnly("on Windows a source install writes the hooks, the .cmd shim and hos
   expect(log.filter((l) => l.startsWith("failed"))).toEqual([]);
   const data = win32.join(home, ".anynotate");
   const hook = JSON.parse(readFileSync(win32.join(home, ".claude", "settings.json"), "utf8")).hooks.UserPromptSubmit[0].hooks[0].command;
-  expect(hook).toBe(`${[process.execPath, win32.join(process.cwd(), "src", "cli.ts")].map((a) => a.replaceAll("\\", "/")).map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")} hook --agent claude`);
+  expect(hook).toBe(`${quoteArgv([process.execPath, win32.join(process.cwd(), "src", "cli.ts")].map((a) => a.replaceAll("\\", "/")), "win32")} hook --agent claude`);
   expect(readFileSync(win32.join(env.LOCALAPPDATA, "anynotate", "bin", "anynotate.cmd"), "utf8")).toEndWith(" %*\r\n");
   expect(existsSync(win32.join(data, "native-host.cmd"))).toBe(true);
   expect(JSON.parse(readFileSync(win32.join(data, "dev.anynotate.host.json"), "utf8")).path).toBe(win32.join(data, "native-host.cmd"));
