@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide · Anynotate</title>
+<meta name="description" content="How to use Anynotate, step by step with screenshots: install, make notes, pick elements, send them to Claude Code, Codex or a herdr pane, and use the inbox.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#513c5e">
+<link rel="icon" type="image/png" href="../img/icon.png">
+<link rel="apple-touch-icon" href="../img/icon.png">
+<link rel="stylesheet" href="../style.css?v=4">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="28" height="28">Anynotate</a>
+    <nav aria-label="Site">
+      <a href="../#install">Install</a>
+      <a href="./" aria-current="page">Guide</a>
+      <a href="../support/">Support</a>
+      <a href="../privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="wrap guide">
+    <div class="page-hero">
+      <span class="eyebrow">Guide</span>
+      <h1>How to use Anynotate</h1>
+      <p class="lead">Every step from install to a finished change, with screenshots. Click any picture to see it full size.</p>
+    </div>
+
+    <nav class="toc" aria-labelledby="toc-title">
+      <h2 id="toc-title">On this page</h2>
+      <ol>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#first-note">Make your first note</a></li>
+        <li><a href="#pick">Pick elements</a></li>
+        <li><a href="#intent">Tag intent</a></li>
+        <li><a href="#edit">Edit and delete</a></li>
+        <li><a href="#send">Send to an agent</a></li>
+        <li><a href="#agent">What the agent sees</a></li>
+        <li><a href="#inbox">Use the herdr inbox</a></li>
+        <li><a href="#settings">Settings and storage</a></li>
+        <li><a href="#trouble">Troubleshooting</a></li>
+      </ol>
+    </nav>
+
+    <section class="guide-section" id="install" aria-labelledby="install-title">
+      <h2 id="install-title"><span class="n" aria-hidden="true">1</span>Install</h2>
+      <ol class="howto">
+        <li>Install the bridge, a small helper that runs on your computer. Paste one line into a terminal:
+          <div class="cmd">
+            <pre><code id="cmd-unix">curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh</code></pre>
+            <button class="copy" type="button" data-copy="cmd-unix">Copy</button>
+          </div>
+          On Windows, in PowerShell:
+          <div class="cmd">
+            <pre><code id="cmd-win">irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex</code></pre>
+            <button class="copy" type="button" data-copy="cmd-win">Copy</button>
+          </div>
+        </li>
+        <li>Add the Anynotate extension to Chrome, Edge, Brave or Chromium. It is coming to the Chrome Web Store soon.</li>
+        <li>The extension opens a welcome page. When it says <strong>Connected</strong>, you are ready.</li>
+      </ol>
+      <figure class="shot narrow">
+        <a class="zoom" href="../img/guide/10-welcome.png"><img src="../img/guide/10-welcome.png" width="656" height="264" loading="lazy" alt="The Anynotate welcome page: a green Connected badge and a three-step tour: press Alt+Shift+A, select text or pick an element, choose a session and press Send."></a>
+        <figcaption>The welcome page finds the bridge by itself.</figcaption>
+      </figure>
+      <p class="tip">Use herdr? <code>herdr plugin install genexk/anynotate/integrations/herdr</code> installs the bridge too, and adds the <a href="#inbox">inbox popup</a>.</p>
+    </section>
+
+    <section class="guide-section" id="first-note" aria-labelledby="first-title">
+      <h2 id="first-title"><span class="n" aria-hidden="true">2</span>Make your first note</h2>
+      <ol class="howto">
+        <li>Open any page and press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> (<kbd class="sym">⌥</kbd><kbd class="sym">⇧</kbd><kbd>A</kbd> on a Mac), or click the Anynotate icon and choose <strong>Annotate this page</strong>. The Anynotate panel opens in the corner.</li>
+        <li>Select some text. A note box opens under it.</li>
+        <li>Write what you want done, then press <strong>Save</strong> (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, <kbd class="sym">⌘</kbd><kbd>Enter</kbd> on a Mac).</li>
+      </ol>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/1-annotate-on.png"><img src="../img/guide/1-annotate-on.png" width="1280" height="800" loading="lazy" alt="A tomato soup recipe page on example.com with the Anynotate panel open in the bottom right corner. The panel is empty and says: Select text or pick an element to add a note."></a>
+        <figcaption>Annotate mode is on: the panel waits for your first note.</figcaption>
+      </figure>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/2-note-popover.png"><img src="../img/guide/2-note-popover.png" width="1280" height="800" loading="lazy" alt="The phrase 'Roast the tomatoes with a little olive oil' is selected and a note box below it reads 'Say what temperature to roast at', with three intent icons and Cancel and Save buttons."></a>
+        <figcaption>Select text, write a note, save.</figcaption>
+      </figure>
+    </section>
+
+    <section class="guide-section" id="pick" aria-labelledby="pick-title">
+      <h2 id="pick-title"><span class="n" aria-hidden="true">3</span>Pick elements</h2>
+      <p>For a button, an image or a whole block, pick the element instead of selecting text. Your agent gets its HTML and a crop of what it looks like.</p>
+      <ol class="howto">
+        <li>Click the crosshair in the panel, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. You can also hold <kbd>Alt</kbd> and click.</li>
+        <li>Move over the page: an outline and a label show what you would pick.</li>
+        <li>Click it and write your note.</li>
+      </ol>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/3-pick-element.png"><img src="../img/guide/3-pick-element.png" width="1280" height="800" loading="lazy" alt="The crosshair in the panel is pressed. The Print recipe button has a blue outline and a dark label above it reads main › div.actions › button#print."></a>
+        <figcaption>The outline and label show the element under the pointer.</figcaption>
+      </figure>
+    </section>
+
+    <section class="guide-section" id="intent" aria-labelledby="intent-title">
+      <h2 id="intent-title"><span class="n" aria-hidden="true">4</span>Tag intent</h2>
+      <p>Three icons under the note say what kind of answer you want. Tagging is optional; click a pressed icon again to clear it.</p>
+      <div class="split">
+        <figure class="shot small">
+          <a class="zoom" href="../img/guide/2-intents.png"><img src="../img/guide/2-intents.png" width="336" height="196" loading="lazy" alt="Close-up of the note box: the comment 'Say what temperature to roast at', and the Request change icon pressed between the Explain and Approve icons."></a>
+          <figcaption>Here the note asks for a change.</figcaption>
+        </figure>
+        <ul class="intents">
+          <li><span class="i" aria-hidden="true">?</span><div><strong>Explain</strong> — you have a question; the agent should answer, not edit.</div></li>
+          <li><span class="i" aria-hidden="true">⇄</span><div><strong>Request change</strong> — the agent should change this.</div></li>
+          <li><span class="i" aria-hidden="true">✓</span><div><strong>Approve</strong> — this is right; leave it alone.</div></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="guide-section" id="edit" aria-labelledby="edit-title">
+      <h2 id="edit-title"><span class="n" aria-hidden="true">5</span>Edit and delete</h2>
+      <p>Every note gets a number on the page and a row in the panel, and stays there until you send it, even if you close the tab.</p>
+      <ol class="howto">
+        <li>To change a note, click its highlight on the page or the pencil in its row. The note box opens with your text.</li>
+        <li>To remove a note, click the bin in its row.</li>
+        <li>Optionally, add an overall note for the whole page in the box under the list.</li>
+      </ol>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/4-notes-light.png"><picture>
+          <source srcset="../img/guide/4-notes-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="../img/guide/4-notes-light.png" width="1280" height="800" loading="lazy" alt="The recipe page with two highlighted phrases and the Print recipe button numbered 1 to 3. The panel lists the three notes with pencil and bin icons, an overall note and a session picker set to claude · recipes · soup.">
+        </picture></a>
+        <figcaption>Numbered notes on the page and in the panel. Highlights stay readable on light and dark pages.</figcaption>
+      </figure>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/5-edit-note.png"><img src="../img/guide/5-edit-note.png" width="1280" height="800" loading="lazy" alt="Note 1 is selected: its highlight is underlined, its row in the panel is marked, and the note box under it shows the saved comment ready to edit."></a>
+        <figcaption>Clicking a highlight reopens its note.</figcaption>
+      </figure>
+    </section>
+
+    <section class="guide-section" id="send" aria-labelledby="send-title">
+      <h2 id="send-title"><span class="n" aria-hidden="true">6</span>Send to an agent</h2>
+      <ol class="howto">
+        <li>Choose where the notes go in the session picker at the bottom of the panel. The ↻ button refreshes the list.</li>
+        <li>Press <strong>Send</strong> (or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> to send to the last place you used). The panel shows a spinner while it captures the page and hands it to the bridge.</li>
+        <li>The line under Send tells you when your agent has the notes.</li>
+      </ol>
+      <div class="shots">
+        <figure class="shot small">
+          <a class="zoom" href="../img/guide/6-target-list.png"><img src="../img/guide/6-target-list.png" width="360" height="499" loading="lazy" alt="The session picker opened as a list: under herdr panes, claude · recipes · soup and codex · shop · pricing; under Inbox, claude · save to inbox and codex · save to inbox."></a>
+          <figcaption>Pick a session.</figcaption>
+        </figure>
+        <figure class="shot small">
+          <a class="zoom" href="../img/guide/7-sending.png"><img src="../img/guide/7-sending.png" width="360" height="451" loading="lazy" alt="The panel while sending: each note row shows a spinner and the button reads Sending…"></a>
+          <figcaption>Sending.</figcaption>
+        </figure>
+        <figure class="shot small">
+          <a class="zoom" href="../img/guide/8-delivered.png"><img src="../img/guide/8-delivered.png" width="360" height="346" loading="lazy" alt="The panel after sending: the notes are gone and the status line reads 'delivered · typed into claude · recipes · soup'."></a>
+          <figcaption>Delivered.</figcaption>
+        </figure>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>In the picker</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>⚡ push</td><td>A session connected live to the bridge gets the notes right away.</td></tr>
+            <tr><td>⌨ herdr panes</td><td>Any agent running in a herdr pane: the notes are typed into the pane as soon as it is idle.</td></tr>
+            <tr><td>⏳ next prompt</td><td>A Claude Code or Codex session gets the notes with the next thing you type there.</td></tr>
+            <tr><td>📥 Inbox</td><td>Saved for later. Any agent can read them with <code>/annotations</code> or <code>anynotate annotations latest</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="guide-section" id="agent" aria-labelledby="agent-title">
+      <h2 id="agent-title"><span class="n" aria-hidden="true">7</span>What the agent sees</h2>
+      <p>Each send becomes a folder in <code>~/.anynotate/inbox/</code>. The agent is pointed at its <code>README.md</code>: your notes in order, with the quoted text or element, your intent and comment. Next to it are the page as text, a screenshot with the numbered markers, and a crop for each note.</p>
+      <figure class="shot term">
+        <a class="zoom" href="../img/guide/agent-receives.png"><img src="../img/guide/agent-receives.png" width="1272" height="581" loading="lazy" alt="Illustration of an agent session in a terminal: the prompt 'Browser notes waiting: read ~/.anynotate/inbox/…/README.md and act on them.' followed by the agent's reply working through the three notes and marking the bundle as read."></a>
+        <figcaption>Illustration: the agent gets one line pointing at the notes, and works through them.</figcaption>
+      </figure>
+      <figure class="shot term">
+        <a class="zoom" href="../img/guide/inbox-readme.png"><img src="../img/guide/inbox-readme.png" width="1272" height="521" loading="lazy" alt="The README of a bundle shown in the Anynotate inbox: the page title and address, the overall note, then note A1 with its quote, comment, crop and selector."></a>
+        <figcaption>The README your agent reads, here opened in the inbox.</figcaption>
+      </figure>
+    </section>
+
+    <section class="guide-section" id="inbox" aria-labelledby="inbox-title">
+      <h2 id="inbox-title"><span class="n" aria-hidden="true">8</span>Use the herdr inbox</h2>
+      <p>The inbox lists everything you have sent, newest first, with where it went and whether the agent has read it. Open it with <code>anynotate inbox</code> in any terminal, or as a popup in herdr with the plugin (bind it to a key such as <span class="nowrap"><kbd>prefix</kbd> <kbd>i</kbd></span>; see the <a href="https://github.com/genexk/anynotate/blob/main/integrations/herdr/README.md">plugin's key bindings</a>).</p>
+      <figure class="shot term">
+        <a class="zoom" href="../img/guide/inbox-list.png"><img src="../img/guide/inbox-list.png" width="1272" height="521" loading="lazy" alt="The Anynotate inbox in a terminal: five bundles with status queued, delivered or read, their age, note count, target such as claude · w1:p2, and the page title."></a>
+        <figcaption>Status, age, number of notes, target and page for each bundle.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>k</kbd> <kbd>j</kbd></td><td>Move</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Read the bundle's README</td></tr>
+            <tr><td><kbd>s</kbd></td><td>Send the bundle to a herdr agent pane</td></tr>
+            <tr><td><kbd>d</kbd></td><td>Delete the bundle (asks first)</td></tr>
+            <tr><td><kbd>a</kbd></td><td>Show or hide archived bundles</td></tr>
+            <tr><td><kbd>r</kbd></td><td>Refresh</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Help</td></tr>
+            <tr><td><kbd>q</kbd> or <kbd>Esc</kbd></td><td>Back, or quit</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figure class="shot term">
+          <a class="zoom" href="../img/guide/inbox-send.png"><img src="../img/guide/inbox-send.png" width="1272" height="521" loading="lazy" alt="The inbox asking which agent pane to send a bundle to, listing three herdr panes with their agent, status, pane id, title and folder."></a>
+          <figcaption><kbd>s</kbd> sends a bundle to any agent pane.</figcaption>
+      </figure>
+      <figure class="shot term">
+          <a class="zoom" href="../img/guide/inbox-delete.png"><img src="../img/guide/inbox-delete.png" width="1272" height="521" loading="lazy" alt="The inbox asking: Delete “Onboarding docs – Getting started”? This removes its folder. y/n"></a>
+          <figcaption><kbd>d</kbd> deletes, after you confirm.</figcaption>
+      </figure>
+      <figure class="shot term">
+        <a class="zoom" href="../img/guide/inbox-help.png"><img src="../img/guide/inbox-help.png" width="1272" height="521" loading="lazy" alt="The inbox help screen listing every key."></a>
+        <figcaption><kbd>?</kbd> shows every key.</figcaption>
+      </figure>
+    </section>
+
+    <section class="guide-section" id="settings" aria-labelledby="settings-title">
+      <h2 id="settings-title"><span class="n" aria-hidden="true">9</span>Settings and storage</h2>
+      <p>Open the extension's options from its menu (right-click the Anynotate icon, then <strong>Options</strong>).</p>
+      <ul class="howto plain">
+        <li><strong>Bridge</strong> shows whether the bridge answers, how many sessions it sees, and the extension and bridge versions.</li>
+        <li><strong>Storage</strong> counts the notes you have not sent yet. They live only in your browser; <strong>Clear all unsent notes</strong> removes them.</li>
+        <li><strong>Advanced</strong> is for a bridge on a different port.</li>
+      </ul>
+      <figure class="shot narrow">
+        <a class="zoom" href="../img/guide/9-options.png"><img src="../img/guide/9-options.png" width="620" height="610" loading="lazy" alt="The Anynotate options page: Bridge says connected · 2 sessions with Extension 0.2.0 and Bridge 0.5.0; Storage says Unsent notes: 2 on 1 page; Advanced has the bridge URL."></a>
+        <figcaption>The options page.</figcaption>
+      </figure>
+      <p>Sent notes are kept in <code>~/.anynotate/inbox/</code> and deleted 30 days after delivery. Change that with <code>anynotate retention 7</code>, or <code>anynotate retention off</code>.</p>
+    </section>
+
+    <section class="guide-section" id="trouble" aria-labelledby="trouble-title">
+      <h2 id="trouble-title"><span class="n" aria-hidden="true">10</span>Troubleshooting</h2>
+      <p>One command checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix:</p>
+      <div class="cmd">
+        <pre><code id="cmd-doctor">anynotate doctor</code></pre>
+        <button class="copy" type="button" data-copy="cmd-doctor">Copy</button>
+      </div>
+      <p>Common problems and their fixes are on the <a href="../support/">support page</a>.</p>
+    </section>
+  </div>
+</main>
+
+<dialog class="lightbox" id="lightbox" aria-label="Screenshot">
+  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
+</dialog>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="24" height="24">Anynotate</a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+      <a href="./">Guide</a>
+      <a href="../support/">Support</a>
+      <a href="../privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate/blob/main/LICENSE">License</a>
+    </nav>
+    <p>Open source: AGPL-3.0, with the protocol package under Apache-2.0.</p>
+  </div>
+</footer>
+
+<script>
+  for (const button of document.querySelectorAll("button.copy")) {
+    button.addEventListener("click", async () => {
+      const text = document.getElementById(button.dataset.copy).textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select and copy";
+      }
+      setTimeout(() => { button.textContent = "Copy"; }, 2000);
+    });
+  }
+
+  const box = document.getElementById("lightbox");
+  if (box && typeof box.showModal === "function") {
+    const big = box.appendChild(document.createElement("img"));
+    for (const link of document.querySelectorAll("a.zoom")) {
+      link.addEventListener("click", (e) => {
+        const img = link.querySelector("img");
+        e.preventDefault();
+        big.src = img.currentSrc || link.href;
+        big.alt = img.alt;
+        box.showModal();
+      });
+    }
+    box.addEventListener("click", (e) => { if (e.target !== big) box.close(); });
+  }
+</script>
+</body>
+</html>

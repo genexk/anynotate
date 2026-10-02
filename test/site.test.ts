@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const SITE = resolve(import.meta.dir, "..", "site");
-const PAGES = ["index.html", "privacy/index.html", "support/index.html"];
+const PAGES = ["index.html", "guide/index.html", "privacy/index.html", "support/index.html"];
 const ALLOWED_HOSTS = new Set(["github.com", "genexk.github.io"]);
 
 function refs(html: string): string[] {
@@ -64,6 +64,20 @@ describe.each(PAGES)("site/%s", (page) => {
     }
   });
 
+  test("links to the guide from the site nav and the footer", () => {
+    const navs = html().match(/<nav aria-label="(?:Site|Footer)">[\s\S]*?<\/nav>/g) ?? [];
+    expect(navs).toHaveLength(2);
+    for (const nav of navs) expect(nav).toMatch(/<a href="(?:\.\.\/)?(?:guide\/|\.\/)"[^>]*>Guide<\/a>/);
+  });
+
+  test("uses the current stylesheet version", () => {
+    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=4"/);
+  });
+
+  test("holds no personal paths or addresses", () => {
+    expect(html()).not.toMatch(/\/Users\/|\/home\/(?!me\b)|@(?!example\.com)[a-z0-9-]+\.(?:com|org|net)/i);
+  });
+
   test("internal links and images resolve to files in site/", () => {
     for (const ref of internalRefs(html())) {
       expect(ref.startsWith("/"), `${ref} is root-relative; Pages serves the site under /anynotate/`).toBe(false);
@@ -76,4 +90,44 @@ describe.each(PAGES)("site/%s", (page) => {
 
 test("the stylesheet loads nothing from other origins", () => {
   expect(readFileSync(join(SITE, "style.css"), "utf8")).not.toMatch(/url\(|@import/);
+});
+
+describe("site/guide", () => {
+  const html = readFileSync(join(SITE, "guide/index.html"), "utf8");
+  const dir = join(SITE, "img/guide");
+  const pngSize = (file: string) => {
+    const head = readFileSync(file).subarray(16, 24);
+    return { width: head.readUInt32BE(0), height: head.readUInt32BE(4) };
+  };
+
+  test("every image is lazy-loaded and opens full size", () => {
+    const imgs = html.match(/<img\b[^>]*>/g)!.filter((img) => img.includes("img/guide/"));
+    expect(imgs.length).toBeGreaterThan(10);
+    for (const img of imgs) expect(img, img).toContain('loading="lazy"');
+    for (const [, href] of html.matchAll(/<a class="zoom" href="([^"]+)">/g)) expect(existsSync(join(SITE, "guide", href!)), href).toBe(true);
+  });
+
+  test("every screenshot in img/guide is used, matches its declared size, and stays small", () => {
+    for (const name of readdirSync(dir).filter((f) => f.endsWith(".png"))) {
+      expect(html, name).toContain(`../img/guide/${name}`);
+      const { width, height } = pngSize(join(dir, name));
+      expect(width, name).toBeLessThanOrEqual(1600);
+      expect(statSync(join(dir, name)).size, name).toBeLessThan(250_000);
+      const img = html.match(new RegExp(`<img src="\\.\\./img/guide/${name.replace(".", "\\.")}"[^>]*>`));
+      if (img) expect(img[0], name).toContain(`width="${width}" height="${height}"`);
+    }
+  });
+
+  test("has the sections the home page promises", () => {
+    for (const id of ["install", "first-note", "pick", "intent", "edit", "send", "agent", "inbox", "settings", "trouble"]) {
+      expect(html).toContain(`id="${id}"`);
+      expect(html).toContain(`href="#${id}"`);
+    }
+  });
+});
+
+test("the home page links to the guide from the hero and the use-it steps", () => {
+  const home = readFileSync(join(SITE, "index.html"), "utf8");
+  expect(home).toMatch(/<a class="btn btn-ghost" href="guide\/">[\s\S]*?See how it works/);
+  expect(home).toContain('<a href="guide/">Read the guide</a>');
 });
