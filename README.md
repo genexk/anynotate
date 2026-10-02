@@ -2,6 +2,8 @@
 
 Annotate any web page and deliver the notes to a running AI CLI session: Claude Code, Codex, or any agent in a [herdr](https://herdr.dev) pane or able to read a file.
 
+Website: [genexk.github.io/anynotate](https://genexk.github.io/anynotate/) ([support](https://genexk.github.io/anynotate/support/), [privacy policy](https://genexk.github.io/anynotate/privacy/)).
+
 This repository holds the agent side: the local bridge, the `anynotate` CLI, the agent hooks and installer, and the [`@anynotate/protocol`](./packages/protocol) package. The Anynotate Chrome extension isn't publicly available yet; a Chrome Web Store release is planned. Until then you can send bundles by hand (see [Sending a bundle by hand](#sending-a-bundle-by-hand)) or build your own client on [`@anynotate/protocol`](./packages/protocol).
 
 ## Install

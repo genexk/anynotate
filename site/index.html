@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anynotate: annotate web pages for your AI coding agent</title>
+<meta name="description" content="Annotate any web page and send the notes to a running AI coding session on your own computer.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="./">Anynotate</a>
+  <nav>
+    <a href="./" aria-current="page">Home</a>
+    <a href="support/">Support</a>
+    <a href="privacy/">Privacy</a>
+    <a href="https://github.com/genexk/anynotate">GitHub</a>
+  </nav>
+</header>
+<main>
+  <h1>Point at a web page, tell your agent what you mean</h1>
+  <p class="lead">Anynotate is a Chrome extension plus a small local helper. You highlight text or pick an element on any page, write a note, and send it to an AI coding session already running on your computer, such as Claude Code, Codex, or any agent in a herdr pane. The agent gets your notes together with the page text, the element's HTML and a screenshot, so it sees what you saw. The extension and bridge send nothing to the developer or any third party; your notes go only to the AI agent you choose, which may pass them to its own model provider.</p>
+
+  <h2>1. Install the bridge</h2>
+  <p>The bridge is the local helper the extension talks to. One command installs it; no administrator rights needed.</p>
+
+  <div class="cmd">
+    <div class="cmd-head"><span>macOS and Linux</span><button class="copy" type="button" data-copy="cmd-unix">Copy</button></div>
+    <pre><code id="cmd-unix">curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh</code></pre>
+  </div>
+
+  <div class="cmd">
+    <div class="cmd-head"><span>Windows (PowerShell)</span><button class="copy" type="button" data-copy="cmd-win">Copy</button></div>
+    <pre><code id="cmd-win">irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex</code></pre>
+  </div>
+
+  <p>The installer checks the download against the release checksums, starts the bridge as a background service and sets up the Chrome helper and agent hooks. See <a href="https://github.com/genexk/anynotate#install">the README</a> for exactly what it writes.</p>
+
+  <h2>2. Add the extension</h2>
+  <p>The Anynotate extension for Chrome is coming soon to the Chrome Web Store.</p>
+
+  <h2>3. Check it works</h2>
+  <p>Run this any time something seems off. It checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix.</p>
+  <div class="cmd">
+    <div class="cmd-head"><span>Health check</span><button class="copy" type="button" data-copy="cmd-doctor">Copy</button></div>
+    <pre><code id="cmd-doctor">anynotate doctor</code></pre>
+  </div>
+  <p>More help is on the <a href="support/">support page</a>.</p>
+
+  <h2>Open source</h2>
+  <p>The bridge, CLI and protocol are open source on <a href="https://github.com/genexk/anynotate">GitHub</a> (AGPL-3.0; the protocol package is Apache-2.0). Read the <a href="privacy/">privacy policy</a> to see how your data is handled: in short, it never reaches the developer.</p>
+</main>
+<footer>
+  <p>Anynotate &middot; <a href="https://github.com/genexk/anynotate">GitHub</a> &middot; <a href="support/">Support</a> &middot; <a href="privacy/">Privacy</a></p>
+</footer>
+<script>
+  for (const button of document.querySelectorAll("button.copy")) {
+    button.addEventListener("click", async () => {
+      const text = document.getElementById(button.dataset.copy).textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select and copy";
+      }
+      setTimeout(() => { button.textContent = "Copy"; }, 2000);
+    });
+  }
+</script>
+</body>
+</html>
