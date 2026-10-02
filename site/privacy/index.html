@@ -5,82 +5,136 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy policy · Anynotate</title>
 <meta name="description" content="How the Anynotate extension and bridge handle your data: it stays on your computer.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#513c5e">
+<link rel="icon" type="image/png" href="../img/icon.png">
+<link rel="apple-touch-icon" href="../img/icon.png">
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-<header>
-  <a class="brand" href="../">Anynotate</a>
-  <nav>
-    <a href="../">Home</a>
-    <a href="../support/">Support</a>
-    <a href="./" aria-current="page">Privacy</a>
-    <a href="https://github.com/genexk/anynotate">GitHub</a>
-  </nav>
-</header>
-<main>
-  <h1>Privacy policy</h1>
-  <p>Effective date: 2 October 2026</p>
-
-  <p class="note"><strong>In short:</strong> Anynotate runs entirely on your computer. The developer collects nothing: no accounts, no analytics, no telemetry, no third-party services. What you annotate goes from the extension to the bridge on your own machine, and from there to the AI agent session you chose.</p>
-
-  <p>This policy covers the Anynotate Chrome extension and the Anynotate bridge and command-line tool (together, "Anynotate"). Anynotate is an open-source project maintained by Kun Xu. You can check everything said here in the <a href="https://github.com/genexk/anynotate">source code</a>.</p>
-
-  <h2>What Anynotate processes</h2>
-  <p>Only when you annotate a page and send the notes, Anynotate handles:</p>
-  <ul>
-    <li>the page's address and title;</li>
-    <li>the text you select and the notes you write;</li>
-    <li>the HTML of an element you pick;</li>
-    <li>the page's text, and a copy of the page's structure (its HTML);</li>
-    <li>a screenshot of the visible part of the page, and cropped images of the parts you annotated;</li>
-    <li>which agent session the notes are for.</li>
-  </ul>
-  <p>Before a screenshot is taken, Anynotate covers password fields and payment-card fields on the page, and it blanks their values in the HTML it copies. This only works for fields in the page itself: fields inside embedded frames (such as a payment form loaded from another site) or inside shadow DOM components are not covered, so avoid annotating pages while such fields show sensitive values. Anynotate does nothing on a page until you turn it on there.</p>
-
-  <h2>Where it goes</h2>
-  <ul>
-    <li><strong>The extension</strong> sends your notes only to the Anynotate bridge on your own computer, at <code>127.0.0.1</code>. It makes no other network requests.</li>
-    <li><strong>The bridge</strong> listens only on <code>127.0.0.1</code>, so other computers cannot reach it. It saves each set of notes as a folder under <code>~/.anynotate</code> in your home folder and hands it to the AI agent session you picked (for example Claude Code or Codex).</li>
-    <li><strong>Your agent</strong> may send what it reads to its own model provider, as it does with anything else you give it. That is between you and the agent you chose; Anynotate does not control it.</li>
-  </ul>
-  <p>The developer never receives any of this data. Anynotate has no server, no account system, no analytics, no telemetry, no crash reporting and no advertising, and it does not use any third-party service. Nothing is sold, shared or transferred to anyone. The only time the bridge contacts the internet is when you run <code>anynotate update</code>, which downloads the latest release from GitHub; it sends none of your notes.</p>
-
-  <h2>How long it is kept</h2>
-  <h3>On your computer (bridge)</h3>
-  <p>Sent notes, with their screenshots, stay under <code>~/.anynotate</code>. By default each one is deleted 30 days after it was delivered to your agent (or after it was created, if it never was). You control this:</p>
-  <ul>
-    <li><code>anynotate retention</code> shows the setting; <code>anynotate retention 7</code> sets 7 days, <code>anynotate retention off</code> turns automatic deletion off;</li>
-    <li><code>anynotate prune</code> deletes everything past the retention period now;</li>
-    <li><code>anynotate uninstall --purge</code> removes Anynotate and deletes <code>~/.anynotate</code> entirely.</li>
-  </ul>
-  <h3>In your browser (extension)</h3>
-  <p>Notes you have not sent yet, and their cropped images, are kept in the extension's storage in your browser until you send or delete them. Cropped images are capped at 200&nbsp;MB in total. The extension's options page shows how much is stored and has a <strong>Clear all unsent notes</strong> button. Removing the extension deletes its storage.</p>
-
-  <h2>Extension permissions and why</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>Permission</th><th>Why it is needed</th></tr></thead>
-    <tbody>
-      <tr><td><code>activeTab</code></td><td>Lets the extension work on the tab you are looking at, only after you click its icon or press its shortcut, and take the screenshot of that tab.</td></tr>
-      <tr><td><code>scripting</code></td><td>Adds the annotation tools to that tab when you turn Anynotate on.</td></tr>
-      <tr><td><code>storage</code></td><td>Keeps your unsent notes and your settings in your browser.</td></tr>
-      <tr><td><code>nativeMessaging</code></td><td>Asks the small helper that <code>anynotate install</code> set up on your computer for the bridge's access token, so you never have to copy it by hand.</td></tr>
-      <tr><td><code>http://127.0.0.1/*</code></td><td>Sends your notes to the bridge on your own computer. The extension has no access to other sites in the background.</td></tr>
-    </tbody>
-  </table>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="28" height="28">Anynotate</a>
+    <nav aria-label="Site">
+      <a href="../#install">Install</a>
+      <a href="../support/">Support</a>
+      <a href="./" aria-current="page">Privacy</a>
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+    </nav>
   </div>
+</header>
 
-  <h2>Children</h2>
-  <p>Anynotate is a developer tool and is not directed at children.</p>
+<main id="main">
+  <div class="wrap narrow">
+    <div class="page-hero">
+      <span class="eyebrow">Privacy</span>
+      <h1>Privacy policy</h1>
+      <p class="meta">Effective date: 2 October 2026</p>
+    </div>
 
-  <h2>Changes</h2>
-  <p>If this policy changes, the new version is published on this page with a new effective date, and the history is visible in the project's GitHub repository.</p>
+    <div class="content">
+      <div class="summary">
+        <p><strong>In short:</strong> Anynotate runs entirely on your computer. The developer collects nothing: no accounts, no analytics, no telemetry, no third-party services. What you annotate goes from the extension to the bridge on your own machine, and from there to the AI agent session you chose.</p>
+      </div>
 
-  <h2>Contact</h2>
-  <p>Questions about privacy: open an issue on <a href="https://github.com/genexk/anynotate/issues">GitHub</a>. To report a security problem privately, follow <a href="https://github.com/genexk/anynotate/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+      <p>This policy covers the Anynotate Chrome extension and the Anynotate bridge and command-line tool (together, "Anynotate"). Anynotate is an open-source project maintained by Kun Xu. You can check everything said here in the <a href="https://github.com/genexk/anynotate">source code</a>.</p>
+
+      <nav class="toc" aria-labelledby="toc-title">
+        <h2 id="toc-title">On this page</h2>
+        <ol>
+          <li><a href="#processes">What Anynotate processes</a></li>
+          <li><a href="#where">Where it goes</a></li>
+          <li><a href="#kept">How long it is kept</a></li>
+          <li><a href="#permissions">Extension permissions and why</a></li>
+          <li><a href="#children">Children</a></li>
+          <li><a href="#changes">Changes</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ol>
+      </nav>
+
+      <section class="card" id="processes" aria-labelledby="processes-title">
+        <h2 id="processes-title">What Anynotate processes</h2>
+        <p>Only when you annotate a page and send the notes, Anynotate handles:</p>
+        <ul>
+          <li>the page's address and title;</li>
+          <li>the text you select and the notes you write;</li>
+          <li>the HTML of an element you pick;</li>
+          <li>the page's text, and a copy of the page's structure (its HTML);</li>
+          <li>a screenshot of the visible part of the page, and cropped images of the parts you annotated;</li>
+          <li>which agent session the notes are for.</li>
+        </ul>
+        <p>Before a screenshot is taken, Anynotate covers password fields and payment-card fields on the page, and it blanks their values in the HTML it copies. This only works for fields in the page itself: fields inside embedded frames (such as a payment form loaded from another site) or inside shadow DOM components are not covered, so avoid annotating pages while such fields show sensitive values. Anynotate does nothing on a page until you turn it on there.</p>
+      </section>
+
+      <section class="card" id="where" aria-labelledby="where-title">
+        <h2 id="where-title">Where it goes</h2>
+        <ul>
+          <li><strong>The extension</strong> sends your notes only to the Anynotate bridge on your own computer, at <code>127.0.0.1</code>. It makes no other network requests.</li>
+          <li><strong>The bridge</strong> listens only on <code>127.0.0.1</code>, so other computers cannot reach it. It saves each set of notes as a folder under <code>~/.anynotate</code> in your home folder and hands it to the AI agent session you picked (for example Claude Code or Codex).</li>
+          <li><strong>Your agent</strong> may send what it reads to its own model provider, as it does with anything else you give it. That is between you and the agent you chose; Anynotate does not control it.</li>
+        </ul>
+        <p>The developer never receives any of this data. Anynotate has no server, no account system, no analytics, no telemetry, no crash reporting and no advertising, and it does not use any third-party service. Nothing is sold, shared or transferred to anyone. The only time the bridge contacts the internet is when you run <code>anynotate update</code>, which downloads the latest release from GitHub; it sends none of your notes.</p>
+      </section>
+
+      <section class="card" id="kept" aria-labelledby="kept-title">
+        <h2 id="kept-title">How long it is kept</h2>
+        <h3>On your computer (bridge)</h3>
+        <p>Sent notes, with their screenshots, stay under <code>~/.anynotate</code>. By default each one is deleted 30 days after it was delivered to your agent (or after it was created, if it never was). You control this:</p>
+        <ul>
+          <li><code>anynotate retention</code> shows the setting; <code>anynotate retention 7</code> sets 7 days, <code>anynotate retention off</code> turns automatic deletion off;</li>
+          <li><code>anynotate prune</code> deletes everything past the retention period now;</li>
+          <li><code>anynotate uninstall --purge</code> removes Anynotate and deletes <code>~/.anynotate</code> entirely.</li>
+        </ul>
+        <h3>In your browser (extension)</h3>
+        <p>Notes you have not sent yet, and their cropped images, are kept in the extension's storage in your browser until you send or delete them. Cropped images are capped at 200&nbsp;MB in total. The extension's options page shows how much is stored and has a <strong>Clear all unsent notes</strong> button. Removing the extension deletes its storage.</p>
+      </section>
+
+      <section class="card" id="permissions" aria-labelledby="permissions-title">
+        <h2 id="permissions-title">Extension permissions and why</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Permission</th><th>Why it is needed</th></tr></thead>
+            <tbody>
+              <tr><td><code>activeTab</code></td><td>Lets the extension work on the tab you are looking at, only after you click its icon or press its shortcut, and take the screenshot of that tab.</td></tr>
+              <tr><td><code>scripting</code></td><td>Adds the annotation tools to that tab when you turn Anynotate on.</td></tr>
+              <tr><td><code>storage</code></td><td>Keeps your unsent notes and your settings in your browser.</td></tr>
+              <tr><td><code>nativeMessaging</code></td><td>Asks the small helper that <code>anynotate install</code> set up on your computer for the bridge's access token, so you never have to copy it by hand.</td></tr>
+              <tr><td><code>http://127.0.0.1/*</code></td><td>Sends your notes to the bridge on your own computer. The extension has no access to other sites in the background.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" id="children" aria-labelledby="children-title">
+        <h2 id="children-title">Children</h2>
+        <p>Anynotate is a developer tool and is not directed at children.</p>
+      </section>
+
+      <section class="card" id="changes" aria-labelledby="changes-title">
+        <h2 id="changes-title">Changes</h2>
+        <p>If this policy changes, the new version is published on this page with a new effective date, and the history is visible in the project's GitHub repository.</p>
+      </section>
+
+      <section class="card" id="contact" aria-labelledby="contact-title">
+        <h2 id="contact-title">Contact</h2>
+        <p>Questions about privacy: open an issue on <a href="https://github.com/genexk/anynotate/issues">GitHub</a>. To report a security problem privately, follow <a href="https://github.com/genexk/anynotate/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+      </section>
+    </div>
+  </div>
 </main>
-<footer>
-  <p>Anynotate &middot; <a href="https://github.com/genexk/anynotate">GitHub</a> &middot; <a href="../support/">Support</a> &middot; <a href="./">Privacy</a></p>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="24" height="24">Anynotate</a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+      <a href="../support/">Support</a>
+      <a href="./">Privacy</a>
+      <a href="https://github.com/genexk/anynotate/blob/main/LICENSE">License</a>
+    </nav>
+    <p>Open source: AGPL-3.0, with the protocol package under Apache-2.0.</p>
+  </div>
 </footer>
 </body>
 </html>

@@ -5,62 +5,135 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Support · Anynotate</title>
 <meta name="description" content="Install, update, troubleshoot and remove Anynotate.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#513c5e">
+<link rel="icon" type="image/png" href="../img/icon.png">
+<link rel="apple-touch-icon" href="../img/icon.png">
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-<header>
-  <a class="brand" href="../">Anynotate</a>
-  <nav>
-    <a href="../">Home</a>
-    <a href="./" aria-current="page">Support</a>
-    <a href="../privacy/">Privacy</a>
-    <a href="https://github.com/genexk/anynotate">GitHub</a>
-  </nav>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="28" height="28">Anynotate</a>
+    <nav aria-label="Site">
+      <a href="../#install">Install</a>
+      <a href="./" aria-current="page">Support</a>
+      <a href="../privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+    </nav>
+  </div>
 </header>
-<main>
-  <h1>Support</h1>
-  <p class="lead">Most problems are found by one command. Start there.</p>
 
-  <h2>Run the health check</h2>
-<pre><code>anynotate doctor</code></pre>
-  <p>It checks the install, your <code>PATH</code>, the background service, the bridge, its token, the Chrome helper, the agent hooks and the retention setting, and says what to fix. It exits with an error only when something required is broken.</p>
+<main id="main">
+  <div class="wrap narrow">
+    <div class="page-hero">
+      <span class="eyebrow">Support</span>
+      <h1>Support</h1>
+      <p class="lead">Most problems are found by one command. Start there.</p>
+    </div>
 
-  <h2>Install, update, remove</h2>
-  <p>Install with the one-line command on the <a href="../">home page</a>. After that:</p>
+    <div class="content">
+      <section class="card" id="doctor" aria-labelledby="doctor-title">
+        <h2 id="doctor-title">Run the health check</h2>
+        <div class="cmd">
+          <pre><code id="cmd-doctor">anynotate doctor</code></pre>
+          <button class="copy" type="button" data-copy="cmd-doctor">Copy</button>
+        </div>
+        <p class="after-cmd">It checks the install, your <code>PATH</code>, the background service, the bridge, its token, the Chrome helper, the agent hooks and the retention setting, and says what to fix. It exits with an error only when something required is broken.</p>
+      </section>
+
+      <nav class="toc" aria-labelledby="toc-title">
+        <h2 id="toc-title">On this page</h2>
+        <ol>
+          <li><a href="#manage">Install, update, remove</a></li>
+          <li><a href="#bridge-down">The bridge is not running</a></li>
+          <li><a href="#not-allowed">Not allowed to talk to the bridge</a></li>
+          <li><a href="#helper">Cannot reach the helper</a></li>
+          <li><a href="#not-found">Command not found</a></li>
+          <li><a href="#not-received">My agent did not receive the notes</a></li>
+          <li><a href="#stuck">Still stuck?</a></li>
+        </ol>
+      </nav>
+
+      <section class="card" id="manage" aria-labelledby="manage-title">
+        <h2 id="manage-title">Install, update, remove</h2>
+        <p>Install with the one-line command on the <a href="../#install">home page</a>. After that:</p>
 <pre><code>anynotate update --dry-run     # show what an update would do
 anynotate update               # install the latest release and restart the bridge
 anynotate uninstall --dry-run  # show what would be removed
 anynotate uninstall            # add --purge to delete ~/.anynotate (your notes) too</code></pre>
-  <p>Re-running <code>anynotate install</code> is always safe: it repairs the setup and restarts the bridge.</p>
+        <p>Re-running <code>anynotate install</code> is always safe: it repairs the setup and restarts the bridge.</p>
+      </section>
 
-  <h2>Common problems</h2>
+      <section class="card" aria-labelledby="problems-title">
+        <h2 id="problems-title">Common problems</h2>
 
-  <h3>The extension says the bridge is not running</h3>
-  <p>Run <code>anynotate doctor</code>. If the bridge or its service is down, run <code>anynotate install</code> to set it up again and restart it. The bridge listens on <code>127.0.0.1</code> port 47291; if another program already uses that port, the bridge cannot start.</p>
+        <div class="problem" id="bridge-down">
+          <h3>The extension says the bridge is not running</h3>
+          <p>Run <code>anynotate doctor</code>. If the bridge or its service is down, run <code>anynotate install</code> to set it up again and restart it. The bridge listens on <code>127.0.0.1</code> port 47291; if another program already uses that port, the bridge cannot start.</p>
+        </div>
 
-  <h3>The extension is not allowed to talk to the bridge</h3>
-  <p>The bridge only accepts the extensions on its allow-list. The Chrome Web Store version is allowed by default with bridge 0.4.1 or later; run <code>anynotate update</code>. For a build you loaded yourself, copy its id from <code>chrome://extensions</code> and run:</p>
+        <div class="problem" id="not-allowed">
+          <h3>The extension is not allowed to talk to the bridge</h3>
+          <p>The bridge only accepts the extensions on its allow-list. The Chrome Web Store version is allowed by default with bridge 0.4.1 or later; run <code>anynotate update</code>. For a build you loaded yourself, copy its id from <code>chrome://extensions</code> and run:</p>
 <pre><code>anynotate origin add chrome-extension://&lt;id&gt;
 anynotate install</code></pre>
-  <p>The second command restarts the bridge and updates the Chrome helper so it picks up the change. <code>anynotate origin list</code> shows the allow-list.</p>
+          <p>The second command restarts the bridge and updates the Chrome helper so it picks up the change. <code>anynotate origin list</code> shows the allow-list.</p>
+        </div>
 
-  <h3>The extension cannot reach the Anynotate helper</h3>
-  <p>The extension gets the bridge's token from a small helper that <code>anynotate install</code> registers with Chrome, Edge, Brave and Chromium. If you installed the browser afterwards, or deleted <code>~/.anynotate/token</code>, run <code>anynotate install</code> again.</p>
+        <div class="problem" id="helper">
+          <h3>The extension cannot reach the Anynotate helper</h3>
+          <p>The extension gets the bridge's token from a small helper that <code>anynotate install</code> registers with Chrome, Edge, Brave and Chromium. If you installed the browser afterwards, or deleted <code>~/.anynotate/token</code>, run <code>anynotate install</code> again.</p>
+        </div>
 
-  <h3><code>anynotate: command not found</code></h3>
-  <p>On macOS and Linux the binary goes to <code>~/.local/bin</code>. If that folder is not on your <code>PATH</code>, add this line to your shell profile (for example <code>~/.zshrc</code> or <code>~/.bashrc</code>) and open a new terminal:</p>
+        <div class="problem" id="not-found">
+          <h3><code>anynotate: command not found</code></h3>
+          <p>On macOS and Linux the binary goes to <code>~/.local/bin</code>. If that folder is not on your <code>PATH</code>, add this line to your shell profile (for example <code>~/.zshrc</code> or <code>~/.bashrc</code>) and open a new terminal:</p>
 <pre><code>export PATH="$HOME/.local/bin:$PATH"</code></pre>
-  <p>On Windows, the installer adds the binary's folder to your user <code>PATH</code>; open a new terminal window to pick it up.</p>
+          <p>On Windows, the installer adds the binary's folder to your user <code>PATH</code>; open a new terminal window to pick it up.</p>
+        </div>
 
-  <h3>My agent did not receive the notes</h3>
-  <p>For Claude Code and Codex, notes sent to a session arrive with your next prompt in that session. In a herdr pane they are typed in once the agent is idle. Any other agent can read the newest notes with <code>anynotate annotations latest</code> or from <code>~/.anynotate/inbox/latest/README.md</code>. <code>anynotate annotations</code> lists the recent ones.</p>
+        <div class="problem" id="not-received">
+          <h3>My agent did not receive the notes</h3>
+          <p>For Claude Code and Codex, notes sent to a session arrive with your next prompt in that session. In a herdr pane they are typed in once the agent is idle. Any other agent can read the newest notes with <code>anynotate annotations latest</code> or from <code>~/.anynotate/inbox/latest/README.md</code>. <code>anynotate annotations</code> lists the recent ones.</p>
+        </div>
+      </section>
 
-  <h2>Still stuck?</h2>
-  <p>Open an issue on <a href="https://github.com/genexk/anynotate/issues">GitHub</a> with the output of <code>anynotate doctor</code> and your operating system. Check the output for anything you would rather not share before posting.</p>
-  <p>Found a security problem? Please don't open a public issue; report it privately as described in <a href="https://github.com/genexk/anynotate/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+      <section class="card" id="stuck" aria-labelledby="stuck-title">
+        <h2 id="stuck-title">Still stuck?</h2>
+        <p>Open an issue on <a href="https://github.com/genexk/anynotate/issues">GitHub</a> with the output of <code>anynotate doctor</code> and your operating system. Check the output for anything you would rather not share before posting.</p>
+        <p>Found a security problem? Please don't open a public issue; report it privately as described in <a href="https://github.com/genexk/anynotate/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+      </section>
+    </div>
+  </div>
 </main>
-<footer>
-  <p>Anynotate &middot; <a href="https://github.com/genexk/anynotate">GitHub</a> &middot; <a href="./">Support</a> &middot; <a href="../privacy/">Privacy</a></p>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../img/icon.png" alt="" width="24" height="24">Anynotate</a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+      <a href="./">Support</a>
+      <a href="../privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate/blob/main/LICENSE">License</a>
+    </nav>
+    <p>Open source: AGPL-3.0, with the protocol package under Apache-2.0.</p>
+  </div>
 </footer>
+<script>
+  for (const button of document.querySelectorAll("button.copy")) {
+    button.addEventListener("click", async () => {
+      const text = document.getElementById(button.dataset.copy).textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select and copy";
+      }
+      setTimeout(() => { button.textContent = "Copy"; }, 2000);
+    });
+  }
+</script>
 </body>
 </html>

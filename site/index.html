@@ -3,56 +3,301 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anynotate: annotate web pages for your AI coding agent</title>
-<meta name="description" content="Annotate any web page and send the notes to a running AI coding session on your own computer.">
+<title>Anynotate: annotate anything in your browser for your AI agent</title>
+<meta name="description" content="Annotate anything in your browser and send it to your AI chat sessions: Claude Code, Codex, and any agent in a herdr pane.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#513c5e">
+<link rel="icon" type="image/png" href="img/icon.png">
+<link rel="apple-touch-icon" href="img/icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <a class="brand" href="./">Anynotate</a>
-  <nav>
-    <a href="./" aria-current="page">Home</a>
-    <a href="support/">Support</a>
-    <a href="privacy/">Privacy</a>
-    <a href="https://github.com/genexk/anynotate">GitHub</a>
-  </nav>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="img/icon.png" alt="" width="28" height="28">Anynotate</a>
+    <nav aria-label="Site">
+      <a href="#install">Install</a>
+      <a href="support/">Support</a>
+      <a href="privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+    </nav>
+  </div>
 </header>
-<main>
-  <h1>Point at a web page, tell your agent what you mean</h1>
-  <p class="lead">Anynotate is a Chrome extension plus a small local helper. You highlight text or pick an element on any page, write a note, and send it to an AI coding session already running on your computer, such as Claude Code, Codex, or any agent in a herdr pane. The agent gets your notes together with the page text, the element's HTML and a screenshot, so it sees what you saw. The extension and bridge send nothing to the developer or any third party; your notes go only to the AI agent you choose, which may pass them to its own model provider.</p>
 
-  <h2>1. Install the bridge</h2>
-  <p>The bridge is the local helper the extension talks to. One command installs it; no administrator rights needed.</p>
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <img class="hero-icon" src="img/icon.png" alt="" width="72" height="72">
+      <h1 id="hero-title">Annotate <span class="hl">anything</span> in your browser</h1>
+      <p class="lead">and send it to your AI chat sessions. Highlight text or pick an element, write a note, and your agent gets it with the page text, the element's HTML and a screenshot, so it sees what you saw.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#install">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Install
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/genexk/anynotate">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <ul class="agents" aria-label="Works with">
+        <li>Claude Code</li>
+        <li>Codex</li>
+        <li>Any agent in a herdr pane: Claude, Codex, Antigravity and more</li>
+      </ul>
+      <div class="frame">
+        <div class="frame-bar" aria-hidden="true"><span></span><span></span><span></span><div class="url">example.com/recipes/tomato-soup</div></div>
+        <picture>
+          <source srcset="img/notes-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="img/notes-light.png" width="1280" height="800" alt="A recipe page with two highlighted phrases and a button, numbered 1 to 3, and the Anynotate panel listing the three notes with a session picker and a Send button.">
+        </picture>
+      </div>
+    </div>
+  </section>
 
-  <div class="cmd">
-    <div class="cmd-head"><span>macOS and Linux</span><button class="copy" type="button" data-copy="cmd-unix">Copy</button></div>
-    <pre><code id="cmd-unix">curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh</code></pre>
-  </div>
+  <section class="section alt" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2 id="how-title">From your page to your agent, on your machine</h2>
+        <p>The extension hands your notes to a small local helper, the bridge, which delivers them to the session you pick.</p>
+      </div>
+      <div class="flow">
+        <span class="flow-label">Your computer</span>
+        <ol>
+          <li class="node">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M4 16h40" stroke="currentColor" stroke-width="2.5"/><rect x="10" y="22" width="18" height="6" rx="1.5" fill="#ffe38a"/><rect x="10" y="31" width="26" height="3" rx="1.5" fill="currentColor" opacity=".35"/><circle cx="10" cy="22" r="4" fill="#2c58c9" stroke="#fff" stroke-width="1.5"/></svg>
+            <strong>Your browser</strong>
+            <small>Highlight, pick, write a note</small>
+          </li>
+          <li class="arrow" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20h26"/><path d="m24 12 8 8-8 8"/></svg>
+            notes, page text, screenshot
+          </li>
+          <li class="node">
+            <img src="img/icon.png" alt="" width="48" height="48">
+            <strong>Anynotate bridge</strong>
+            <small>Runs locally on 127.0.0.1</small>
+          </li>
+          <li class="arrow" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20h26"/><path d="m24 12 8 8-8 8"/></svg>
+            delivered to the session you pick
+          </li>
+          <li class="node">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="8" width="40" height="32" rx="5" fill="#1e1924" stroke="currentColor" stroke-width="2.5"/><path d="m12 20 6 4-6 4" fill="none" stroke="#ffe38a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 29h12" stroke="#f1ecf4" stroke-width="2.5" stroke-linecap="round"/></svg>
+            <strong>Your AI agent session</strong>
+            <small>Claude Code, Codex or a herdr pane</small>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
 
-  <div class="cmd">
-    <div class="cmd-head"><span>Windows (PowerShell)</span><button class="copy" type="button" data-copy="cmd-win">Copy</button></div>
-    <pre><code id="cmd-win">irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex</code></pre>
-  </div>
+  <section class="section" id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Install</span>
+        <h2 id="install-title">Two steps, about a minute</h2>
+        <p>No account, no administrator rights.</p>
+      </div>
+      <ol class="steps two">
+        <li class="step">
+          <span class="step-num" aria-hidden="true">1</span>
+          <h3>Install the bridge</h3>
+          <p class="muted">Paste one line into a terminal. It checks the download, starts the bridge in the background and connects your agents.</p>
+          <div class="tabs">
+            <div role="tablist" aria-label="Operating system" hidden>
+              <button type="button" role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true">macOS / Linux</button>
+              <button type="button" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1">Windows</button>
+            </div>
+            <div class="cmd" role="tabpanel" id="panel-unix" aria-label="macOS and Linux">
+              <pre><code id="cmd-unix">curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh</code></pre>
+              <button class="copy" type="button" data-copy="cmd-unix">Copy</button>
+            </div>
+            <div class="cmd" role="tabpanel" id="panel-win" aria-label="Windows PowerShell">
+              <pre><code id="cmd-win">irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex</code></pre>
+              <button class="copy" type="button" data-copy="cmd-win">Copy</button>
+            </div>
+          </div>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">2</span>
+          <h3>Add the Chrome extension</h3>
+          <p class="muted">Works in Chrome, Edge, Brave and Chromium.</p>
+          <span class="btn btn-soon" aria-disabled="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M21.2 8H12M3.9 6.1 8.5 14M10.9 21.9 15.5 14"/></svg>
+            Chrome Web Store <span class="badge">Coming soon</span>
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
 
-  <p>The installer checks the download against the release checksums, starts the bridge as a background service and sets up the Chrome helper and agent hooks. See <a href="https://github.com/genexk/anynotate#install">the README</a> for exactly what it writes.</p>
+  <section class="section alt" aria-labelledby="use-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Use it</span>
+        <h2 id="use-title">Three tiny steps</h2>
+      </div>
+      <ol class="steps three">
+        <li class="step">
+          <span class="step-num" aria-hidden="true">1</span>
+          <h3>Start</h3>
+          <p>Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> on any page.</p>
+          <p class="muted">On a Mac: <kbd class="sym">⌥</kbd><kbd class="sym">⇧</kbd><kbd>A</kbd></p>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">2</span>
+          <h3>Annotate</h3>
+          <p>Highlight text, or pick an element with the crosshair or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. Write a note.</p>
+          <p class="muted">Optionally tag it: explain, change or approve.</p>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">3</span>
+          <h3>Send</h3>
+          <p>Pick a session and press <strong>Send</strong>.</p>
+          <p class="muted">Your agent gets every note with its context.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
 
-  <h2>2. Add the extension</h2>
-  <p>The Anynotate extension for Chrome is coming soon to the Chrome Web Store.</p>
+  <section class="section" aria-labelledby="see-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">See it</span>
+        <h2 id="see-title">Notes that stay where you put them</h2>
+      </div>
+      <div class="gallery">
+        <figure>
+          <img src="img/note-intents.png" width="1280" height="800" loading="lazy" alt="A note popover under the highlighted phrase 'Chop up 2 cloves', with the text 'Say how long it should simmer', the change intent selected, and Cancel and Save buttons.">
+          <figcaption>Write a note and tag what you want: explain, change or approve.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/notes-dark.png" width="1280" height="800" loading="lazy" alt="A dark recipe page with two highlighted phrases and a selected heading, numbered 1 to 3, next to the Anynotate panel.">
+          <figcaption>Numbered highlights and picked elements, on light and dark pages.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
 
-  <h2>3. Check it works</h2>
-  <p>Run this any time something seems off. It checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix.</p>
-  <div class="cmd">
-    <div class="cmd-head"><span>Health check</span><button class="copy" type="button" data-copy="cmd-doctor">Copy</button></div>
-    <pre><code id="cmd-doctor">anynotate doctor</code></pre>
-  </div>
-  <p>More help is on the <a href="support/">support page</a>.</p>
+  <section class="section alt" aria-labelledby="features-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Features</span>
+        <h2 id="features-title">Everything your agent needs to understand you</h2>
+      </div>
+      <ul class="features">
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg></span>
+          <div><h3>Numbered highlights</h3><p>Every note is numbered on the page and stays there until you send it.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/></svg></span>
+          <div><h3>Element picker</h3><p>Point at a button, image or block; your agent gets its HTML.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span>
+          <div><h3>Intent tags</h3><p>Mark a note as explain, change or approve so the ask is clear.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+          <div><h3>Edit and delete</h3><p>Change your mind before sending: fix or remove any note.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></span>
+          <div><h3>Screenshot crops</h3><p>A crop of what you pointed at is captured when you write the note.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></span>
+          <div><h3>Send anywhere</h3><p>To Claude Code, Codex, a herdr pane, or an inbox any agent can read.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span>
+          <div><h3>Nothing lost</h3><p>Unsent notes are kept in your browser until you send or delete them.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></span>
+          <div><h3>Light and dark pages</h3><p>Highlights and the panel stay readable on any page.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div><h3>Tidy inbox</h3><p>Delivered notes are cleaned up after 30 days. You choose the period.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+          <div><h3>macOS, Linux, Windows</h3><p>One-line installers and a background service on all three.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></svg></span>
+          <div><h3>Chromium browsers</h3><p>The helper is set up for Chrome, Edge, Brave and Chromium.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></span>
+          <div><h3>Open source</h3><p>The bridge, CLI and protocol are on GitHub for anyone to read.</p></div>
+        </li>
+      </ul>
+    </div>
+  </section>
 
-  <h2>Open source</h2>
-  <p>The bridge, CLI and protocol are open source on <a href="https://github.com/genexk/anynotate">GitHub</a> (AGPL-3.0; the protocol package is Apache-2.0). Read the <a href="privacy/">privacy policy</a> to see how your data is handled: in short, it never reaches the developer.</p>
+  <section class="section" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <div class="card privacy-card">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <div>
+          <h2 id="privacy-title">Private by design</h2>
+          <ul>
+            <li>The extension sends nothing off your computer.</li>
+            <li>Your notes go only to the local bridge and the agent you choose.</li>
+            <li>No accounts, no analytics, no tracking.</li>
+          </ul>
+          <p class="muted">Your agent may pass what it reads to its own model provider, as it does with anything you give it. <a href="privacy/">Read the privacy policy</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section alt" aria-labelledby="help-title">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Troubleshooting</span>
+        <h2 id="help-title">Something not working?</h2>
+        <p>Only needed if there are issues.</p>
+      </div>
+      <details>
+        <summary>Run the health check, or update</summary>
+        <div class="details-body">
+          <p>This checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix:</p>
+          <div class="cmd">
+            <pre><code id="cmd-doctor">anynotate doctor</code></pre>
+            <button class="copy" type="button" data-copy="cmd-doctor">Copy</button>
+          </div>
+          <p>Get the latest release and restart the bridge:</p>
+          <div class="cmd">
+            <pre><code id="cmd-update">anynotate update</code></pre>
+            <button class="copy" type="button" data-copy="cmd-update">Copy</button>
+          </div>
+          <p>Common problems and fixes are on the <a href="support/">support page</a>.</p>
+        </div>
+      </details>
+    </div>
+  </section>
 </main>
-<footer>
-  <p>Anynotate &middot; <a href="https://github.com/genexk/anynotate">GitHub</a> &middot; <a href="support/">Support</a> &middot; <a href="privacy/">Privacy</a></p>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="img/icon.png" alt="" width="24" height="24">Anynotate</a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/genexk/anynotate">GitHub</a>
+      <a href="support/">Support</a>
+      <a href="privacy/">Privacy</a>
+      <a href="https://github.com/genexk/anynotate/blob/main/LICENSE">License</a>
+    </nav>
+    <p>Open source: AGPL-3.0, with the protocol package under Apache-2.0.</p>
+  </div>
 </footer>
+
 <script>
   for (const button of document.querySelectorAll("button.copy")) {
     button.addEventListener("click", async () => {
@@ -65,6 +310,30 @@
       }
       setTimeout(() => { button.textContent = "Copy"; }, 2000);
     });
+  }
+
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function select(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    }
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      select(next);
+      next.focus();
+    });
+  });
+  if (tabs.length) {
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+    select(document.getElementById(/win/i.test(platform) ? "tab-win" : "tab-unix"));
+    tabs[0].parentElement.hidden = false;
   }
 </script>
 </body>
