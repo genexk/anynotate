@@ -1,18 +1,23 @@
-import { readFileSync, writeSync } from "node:fs";
+import { existsSync, readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json";
 import { runAnnotations } from "./agent/annotations";
+import { runDeliver } from "./agent/deliver";
+import { runInbox } from "./agent/inbox";
+import { notifyArgv, STATUS_USAGE, summarizeChecks } from "./agent/status";
+import { bunExec } from "./bridge/exec";
+import { herdrBin } from "./bridge/herdr";
 import { runHook } from "./agent/hook";
 import { applyInstall, planInstall } from "./agent/install";
 import { commandArgv, detectInstallKind, readInstallRecord } from "./agent/installkind";
 import { applyUninstall, planUninstall } from "./agent/uninstall";
-import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, readHealth, stopBridge } from "./bridge/control";
+import { bridgePort, bridgeStatus, claimPidFile, type Control, detachBridge, ensureBridge, readHealth, stopBridge } from "./bridge/control";
 import { formatChecks, runDoctor } from "./agent/doctor";
 import { anynotateHome } from "./inbox/paths";
 import { dryRunExec, spawnExec as platformExec } from "./platform/exec";
 import { currentPlatform, installPaths } from "./platform/os";
-import { detectUserSystemd, planService, runSteps } from "./platform/service";
+import { detectUserSystemd, installedServiceFile, planService, runSteps } from "./platform/service";
 import { runNativeHost } from "./agent/native-host";
 import { callerOrigin, isNativeHostInvocation } from "./platform/nativehost";
 import { selfUpdate } from "./agent/selfupdate";
@@ -54,6 +59,21 @@ const [cmd, ...rest] = process.argv.slice(2);
 const externalDryRun = process.env.ANYNOTATE_EXTERNAL_DRYRUN === "1";
 const exec = externalDryRun ? dryRunExec : platformExec;
 
+function doctorChecks() {
+  const port = bridgePort();
+  return runDoctor({
+    platform: currentPlatform(),
+    home: homedir(),
+    env: process.env,
+    uid: process.getuid?.() ?? 0,
+    version: pkg.version,
+    exec,
+    fetchHealth: () => readHealth(port),
+    port,
+    externalDryRun,
+  });
+}
+
 switch (cmd) {
   case "--version":
   case "version":
@@ -67,6 +87,10 @@ switch (cmd) {
       log: (line) => console.log(line),
       err: (line) => console.error(line),
     };
+    if (rest.includes("--ensure")) {
+      const serviceFile = installedServiceFile({ platform: currentPlatform(), home: homedir(), env: process.env, dataDir: control.dataDir }, existsSync);
+      process.exit(await ensureBridge(control, [...commandArgv(detectInstallKind()), "bridge", "--pid-file"], serviceFile));
+    }
     if (rest.includes("--detach")) process.exit(await detachBridge(control, [...commandArgv(detectInstallKind()), "bridge", "--pid-file"]));
     if (rest.includes("--stop")) process.exit(await stopBridge(control));
     if (rest.includes("--status")) process.exit(await bridgeStatus(control));
@@ -104,9 +128,15 @@ switch (cmd) {
   case "annotations":
     console.log(runAnnotations(rest));
     break;
+  case "inbox":
+    process.exit(
+      await runInbox(rest, { stdin: process.stdin, stdout: process.stdout, env: process.env, log: (line) => console.log(line), err: (line) => console.error(line) }),
+    );
   case "token":
     console.log(loadOrCreateToken());
     break;
+  case "deliver":
+    process.exit(await runDeliver(rest, { log: (line) => console.log(line), err: (line) => console.error(line) }));
   case "install": {
     if (rest.some((a) => a !== "--dry-run" && a !== "--no-hints")) {
       console.error("usage: anynotate install [--dry-run] [--no-hints]");
@@ -211,20 +241,24 @@ switch (cmd) {
     process.exit(code);
   }
   case "doctor": {
-    const port = bridgePort();
-    const checks = await runDoctor({
-      platform: currentPlatform(),
-      home: homedir(),
-      env: process.env,
-      uid: process.getuid?.() ?? 0,
-      version: pkg.version,
-      exec,
-      fetchHealth: () => readHealth(port),
-      port,
-      externalDryRun,
-    });
-    const { text, code } = formatChecks(checks);
+    const { text, code } = formatChecks(await doctorChecks());
     process.stdout.write(text);
+    process.exit(code);
+  }
+  case "status": {
+    if (rest.some((a) => a !== "--notify")) {
+      console.error(STATUS_USAGE);
+      process.exit(1);
+    }
+    const { line, code } = summarizeChecks(await doctorChecks(), pkg.version);
+    console.log(line);
+    if (rest.includes("--notify")) {
+      const r = await bunExec(notifyArgv(herdrBin(), line), 5000);
+      if (r.code !== 0) {
+        const why = (r.stderr || r.stdout).split(/\r?\n/).find((l) => l.trim())?.trim();
+        console.error(`anynotate: could not send the herdr notification (exit ${r.code}${why ? `: ${why}` : ""})`);
+      }
+    }
     process.exit(code);
   }
   case "retention": {
@@ -286,6 +320,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <--version|bridge [--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|token|install [--dry-run] [--no-hints]|doctor|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <--version|bridge [--ensure|--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|deliver <id|latest> --pane <pane-id> [--dry-run]|inbox [--select <id|latest>] [--plain]|token|install [--dry-run] [--no-hints]|doctor|status [--notify]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

@@ -161,6 +161,21 @@ export function planService(o: ServiceOptions): ServicePlan {
   }
 }
 
+// The service file `anynotate install` left that keeps the bridge running (launchd agent, systemd user unit, or the
+// Windows Run-key script), or null. The Linux autostart entry is not one: it only starts the bridge at login.
+export function installedServiceFile(
+  o: { platform: Platform; home: string; env: Env; dataDir: string },
+  exists: (path: string) => boolean,
+): string | null {
+  const candidate =
+    o.platform === "darwin"
+      ? posix.join(o.home, "Library", "LaunchAgents", `${LAUNCHD_LABEL}.plist`)
+      : o.platform === "linux"
+        ? posix.join(xdgConfigHome(o.home, o.env), "systemd", "user", SYSTEMD_UNIT)
+        : win32.join(o.dataDir, "bridge.vbs");
+  return exists(candidate) ? candidate : null;
+}
+
 export const detectUserSystemd = (exec: Exec): boolean => exec(["systemctl", "--user", "show-environment"]).code === 0;
 
 // Failures that leave the system in the state the step was after: unloading a service or stopping a bridge that

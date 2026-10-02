@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bridgeStatus, type Control, detachBridge, isBridgeProcess, SERVICE_MANAGED, stopBridge } from "../src/bridge/control";
+import { bridgeStatus, type Control, detachBridge, ensureBridge, isBridgeProcess, SERVICE_MANAGED, stopBridge } from "../src/bridge/control";
+import { installedServiceFile } from "../src/platform/service";
 import type { Exec } from "../src/platform/exec";
 
 let dir: string;
@@ -110,4 +111,35 @@ test("status shows a pid only when that pid is confirmed to be a bridge", async 
   expect(out.at(-1)).toContain(SERVICE_MANAGED);
   expect(await bridgeStatus(control({ exec: commandLine("/opt/bun/bin/bun /x/src/cli.ts bridge --pid-file").exec }))).toBe(0);
   expect(out.at(-1)).toBe(`bridge running on http://127.0.0.1:1 (pid ${process.pid})`);
+});
+
+test("ensure does nothing when a bridge answers", async () => {
+  expect(await ensureBridge(control({ answers: async () => true }), ["/nonexistent/anynotate"], null)).toBe(0);
+  expect(out).toEqual(["bridge already running on http://127.0.0.1:1"]);
+});
+
+test("ensure does not start a second bridge next to an installed service", async () => {
+  const plist = "/home/me/Library/LaunchAgents/dev.anynotate.bridge.plist";
+  expect(await ensureBridge(control({ answers: async () => false }), ["/nonexistent/anynotate"], plist)).toBe(0);
+  expect(out).toEqual([`bridge not answering, but it is managed by the service in ${plist}; not starting another`]);
+  expect(existsSync(join(dir, "bridge.log"))).toBe(false);
+});
+
+test("ensure detaches a bridge when nothing answers and no service is installed", async () => {
+  expect(await ensureBridge(control({ answers: async () => false }), ["/nonexistent/anynotate"], null)).toBe(1);
+  expect(errs[0]).toContain("the bridge did not start");
+});
+
+test("installedServiceFile finds the launchd agent, the systemd unit or the Run-key script, but not autostart", () => {
+  const home = "/home/me";
+  const seen: string[] = [];
+  const has = (files: string[]) => (p: string) => (seen.push(p), files.includes(p));
+  const plist = "/home/me/Library/LaunchAgents/dev.anynotate.bridge.plist";
+  expect(installedServiceFile({ platform: "darwin", home, env: {}, dataDir: "/x" }, has([plist]))).toBe(plist);
+  expect(installedServiceFile({ platform: "darwin", home, env: {}, dataDir: "/x" }, has([]))).toBeNull();
+  const unit = "/cfg/systemd/user/anynotate-bridge.service";
+  expect(installedServiceFile({ platform: "linux", home, env: { XDG_CONFIG_HOME: "/cfg" }, dataDir: "/x" }, has([unit]))).toBe(unit);
+  expect(installedServiceFile({ platform: "linux", home, env: {}, dataDir: "/x" }, has(["/home/me/.config/autostart/anynotate-bridge.desktop"]))).toBeNull();
+  const vbs = "C:\\Users\\me\\.anynotate\\bridge.vbs";
+  expect(installedServiceFile({ platform: "win32", home: "C:\\Users\\me", env: {}, dataDir: "C:\\Users\\me\\.anynotate" }, has([vbs]))).toBe(vbs);
 });

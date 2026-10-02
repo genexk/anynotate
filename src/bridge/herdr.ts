@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_NAME, type Agent } from "@anynotate/protocol";
 import { inboxDir } from "../inbox/paths";
@@ -8,14 +9,26 @@ export type Pane = { pane: string; agent: Agent; cwd: string; title: string; sta
 const NOT_AN_AGENT = new Set(["unknown", "none"]);
 const isAgentName = (v: unknown): v is Agent => typeof v === "string" && AGENT_NAME.test(v) && !NOT_AN_AGENT.has(v);
 
-const defaultBin = () => process.env.ANYNOTATE_HERDR ?? "herdr";
+// herdr hands its plugins HERDR_BIN_PATH, but a bridge started from a plugin keeps it after herdr is upgraded and
+// that path is gone, so it is used only while the file exists.
+export const herdrBin = (env: Record<string, string | undefined> = process.env, exists: (path: string) => boolean = existsSync) =>
+  env.ANYNOTATE_HERDR || (env.HERDR_BIN_PATH && exists(env.HERDR_BIN_PATH) ? env.HERDR_BIN_PATH : "herdr");
+const defaultBin = () => herdrBin();
 
-export async function listPanes(exec: Exec = bunExec, bin = defaultBin()): Promise<Pane[]> {
+export type PaneList = { panes: Pane[] } | { error: string; missing?: true };
+
+export async function readPanes(exec: Exec = bunExec, bin = defaultBin()): Promise<PaneList> {
   const r = await exec([bin, "agent", "list"], 5000);
-  if (r.code !== 0) return [];
+  if (r.code === 127 && !r.stdout) return { error: `herdr not found: ${bin}`, missing: true };
+  if (r.code !== 0) return { error: (r.stderr || r.stdout).trim() || `herdr agent list failed (exit ${r.code})` };
+  let agents: Record<string, string>[];
   try {
-    const agents = (JSON.parse(r.stdout).result?.agents ?? []) as Record<string, string>[];
-    return agents
+    agents = (JSON.parse(r.stdout).result?.agents ?? []) as Record<string, string>[];
+  } catch {
+    return { error: "herdr agent list printed something that is not JSON" };
+  }
+  return {
+    panes: agents
       .filter((a) => isAgentName(a.agent))
       .map((a) => ({
         pane: a.pane_id ?? "",
@@ -23,10 +36,13 @@ export async function listPanes(exec: Exec = bunExec, bin = defaultBin()): Promi
         cwd: a.cwd ?? "",
         title: a.terminal_title_stripped ?? "",
         status: a.agent_status ?? "unknown",
-      }));
-  } catch {
-    return [];
-  }
+      })),
+  };
+}
+
+export async function listPanes(exec: Exec = bunExec, bin = defaultBin()): Promise<Pane[]> {
+  const r = await readPanes(exec, bin);
+  return "panes" in r ? r.panes : [];
 }
 
 export const herdrPromptText = (bundleId: string) =>

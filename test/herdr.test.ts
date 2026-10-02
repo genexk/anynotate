@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { bunExec, type Exec } from "../src/bridge/exec";
-import { herdrPromptText, listPanes, PROMPT_TIMEOUT_MS, promptPane, waitIdle } from "../src/bridge/herdr";
+import { herdrBin, herdrPromptText, listPanes, PROMPT_TIMEOUT_MS, promptPane, readPanes, waitIdle } from "../src/bridge/herdr";
 import { STALE_CLAIM_MS } from "../src/inbox/store";
 
 const originalHome = process.env.ANYNOTATE_HOME;
@@ -72,4 +72,26 @@ test("a missing herdr binary degrades instead of throwing", async () => {
   const r = await waitIdle("p", { exec: bunExec, bin: "/nonexistent/herdr", idleTimeoutMs: 1000 });
   expect(r.ok).toBe(false);
   if (!r.ok) expect(r.error).toMatch(/ENOENT|no such file|not found/i);
+});
+
+test("herdrBin prefers ANYNOTATE_HERDR, then herdr's own HERDR_BIN_PATH while it exists, then herdr on PATH", () => {
+  const exists = (p: string) => p === "/b/herdr";
+  expect(herdrBin({ ANYNOTATE_HERDR: "/a/herdr", HERDR_BIN_PATH: "/b/herdr" }, exists)).toBe("/a/herdr");
+  expect(herdrBin({ HERDR_BIN_PATH: "/b/herdr" }, exists)).toBe("/b/herdr");
+  expect(herdrBin({ HERDR_BIN_PATH: "/gone/herdr" }, exists)).toBe("herdr");
+  expect(herdrBin({ HERDR_BIN_PATH: "/gone/herdr" })).toBe("herdr");
+  expect(herdrBin({ ANYNOTATE_HERDR: "", HERDR_BIN_PATH: "" }, exists)).toBe("herdr");
+});
+
+test("readPanes says why herdr could not list panes", async () => {
+  expect(await readPanes(fakeExec({ "agent list": { code: 0, stdout: listJson } }, []), "herdr")).toMatchObject({ panes: [{ pane: "w4:pV" }, { pane: "w1:p2" }, { pane: "w1:p3" }] });
+  expect(await readPanes(fakeExec({ "agent list": { code: 2, stderr: "server not running" } }, []), "herdr")).toEqual({ error: "server not running" });
+  expect(await readPanes(fakeExec({ "agent list": { code: 0, stdout: "nope" } }, []), "herdr")).toEqual({ error: "herdr agent list printed something that is not JSON" });
+  expect(await readPanes(bunExec, "/nonexistent/herdr")).toEqual({ error: "herdr not found: /nonexistent/herdr", missing: true });
+});
+
+test("bunExec says when it stopped a command for running past its timeout", async () => {
+  const r = await bunExec([process.execPath, "-e", "await Bun.sleep(5000)"], 200);
+  expect(r.code).not.toBe(0);
+  expect(r.stderr).toContain("timed out after 200 ms");
 });

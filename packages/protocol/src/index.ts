@@ -76,6 +76,7 @@ export const Status = z.object({
   at: z.string(),
   via: Via.optional(),
   session: z.string().optional(),
+  agent: Agent.optional(),
   summary: z.string().optional(),
   note: z.string().optional(),
 });

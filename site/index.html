@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#513c5e">
 <link rel="icon" type="image/png" href="img/icon.png">
 <link rel="apple-touch-icon" href="img/icon.png">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -131,6 +131,23 @@
           </span>
         </li>
       </ol>
+      <div class="card herdr-card" id="herdr">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M12 3v18M12 12h10"/><path d="m5 9 2 2-2 2"/></svg></span>
+        <div>
+          <h3>Works great with herdr</h3>
+          <p class="muted">Run your agents in herdr? Add the Anynotate plugin (herdr 0.9.0 or later, macOS and Linux; Windows support for the plugin is coming). It installs the bridge too if you skipped step 1.</p>
+          <div class="cmd">
+            <pre><code id="cmd-herdr">herdr plugin install genexk/anynotate/integrations/herdr</code></pre>
+            <button class="copy" type="button" data-copy="cmd-herdr">Copy</button>
+          </div>
+          <ul>
+            <li><strong>Inbox popup.</strong> Browse, read, send or delete your notes without leaving herdr.</li>
+            <li><strong>Send to this pane.</strong> One key types the latest notes into the focused agent.</li>
+            <li><strong>Status and links.</strong> A health check as a herdr notification, and Ctrl-click a note's path to open it.</li>
+          </ul>
+          <p class="muted"><a href="https://github.com/genexk/anynotate/blob/main/integrations/herdr/README.md">Key bindings and details</a></p>
+        </div>
+      </div>
     </div>
   </section>
 

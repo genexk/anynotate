@@ -556,10 +556,26 @@ kbd.sym { font-family: system-ui, -apple-system, sans-serif; font-size: 0.95em; 
 }
 @media (min-width: 760px) { .privacy-card { grid-template-columns: auto 1fr; align-items: start; padding: 2rem; } }
 .privacy-card .muted { color: var(--muted); margin: 0; }
-.privacy-card .icon { width: 3.5rem; height: 3.5rem; border-radius: 14px; }
-.privacy-card .icon svg { width: 1.9rem; height: 1.9rem; }
-.privacy-card ul { margin: 0 0 1rem; padding-left: 1.2rem; }
-.privacy-card li { margin-bottom: 0.3rem; }
+.privacy-card .icon, .herdr-card .icon { width: 3.5rem; height: 3.5rem; border-radius: 14px; }
+.privacy-card .icon svg, .herdr-card .icon svg { width: 1.9rem; height: 1.9rem; }
+.privacy-card ul, .herdr-card ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+.privacy-card li, .herdr-card li { margin-bottom: 0.3rem; }
+
+/* herdr card */
+
+.herdr-card {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 60rem;
+  margin: 1.25rem auto 0;
+  padding: 1.5rem;
+  border-left: 5px solid var(--blue);
+}
+@media (min-width: 760px) { .herdr-card { grid-template-columns: auto 1fr; align-items: start; padding: 2rem; } }
+.herdr-card > div { min-width: 0; }
+.herdr-card .muted { color: var(--muted); }
+.herdr-card > div > .muted:last-child { margin: 0; }
+.herdr-card .cmd { margin-bottom: 1rem; }
 
 /* Troubleshooting */
 

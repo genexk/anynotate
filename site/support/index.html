@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#513c5e">
 <link rel="icon" type="image/png" href="../img/icon.png">
 <link rel="apple-touch-icon" href="../img/icon.png">
-<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="../style.css?v=3">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -52,6 +52,7 @@
           <li><a href="#helper">Cannot reach the helper</a></li>
           <li><a href="#not-found">Command not found</a></li>
           <li><a href="#not-received">My agent did not receive the notes</a></li>
+          <li><a href="#herdr">herdr plugin</a></li>
           <li><a href="#stuck">Still stuck?</a></li>
         </ol>
       </nav>
@@ -98,6 +99,17 @@ anynotate install</code></pre>
           <h3>My agent did not receive the notes</h3>
           <p>For Claude Code and Codex, notes sent to a session arrive with your next prompt in that session. In a herdr pane they are typed in once the agent is idle. Any other agent can read the newest notes with <code>anynotate annotations latest</code> or from <code>~/.anynotate/inbox/latest/README.md</code>. <code>anynotate annotations</code> lists the recent ones.</p>
         </div>
+      </section>
+
+      <section class="card" id="herdr" aria-labelledby="herdr-title">
+        <h2 id="herdr-title">herdr plugin</h2>
+        <p>In herdr 0.9.0 or later, the plugin adds an inbox popup, a "send the latest notes to this pane" action, a status notification, and Ctrl-click on a note's <code>README.md</code> path. It installs Anynotate too if needed:</p>
+        <div class="cmd">
+          <pre><code id="cmd-herdr">herdr plugin install genexk/anynotate/integrations/herdr</code></pre>
+          <button class="copy" type="button" data-copy="cmd-herdr">Copy</button>
+        </div>
+        <p class="after-cmd">The plugin binds no keys. Add the bindings from the <a href="https://github.com/genexk/anynotate/blob/main/integrations/herdr/README.md">plugin README</a> to <code>~/.config/herdr/config.toml</code>; it suggests <kbd>prefix</kbd>+<kbd>i</kbd> for the inbox and <kbd>prefix</kbd>+<kbd>y</kbd> to send. The same tools work outside herdr: <code>anynotate inbox</code>, <code>anynotate deliver latest --pane &lt;pane-id&gt;</code> and <code>anynotate status</code>.</p>
+        <p>If sending fails, the notification says why: the focused pane must be an agent pane, and an agent showing an approval dialog has to be answered first. To get a newer plugin, run the install command again; <code>herdr plugin uninstall anynotate</code> removes the plugin but keeps Anynotate.</p>
       </section>
 
       <section class="card" id="stuck" aria-labelledby="stuck-title">

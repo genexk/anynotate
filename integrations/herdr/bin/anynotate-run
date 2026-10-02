@@ -1,0 +1,38 @@
+#!/bin/sh
+# Runs the installed anynotate with every argument passed through.
+#
+# herdr starts plugin commands without a shell and with the server's PATH,
+# which often lacks ~/.local/bin, so the executable is looked up here:
+#   1. $ANYNOTATE_BIN_DIR/anynotate (the installer's override)
+#   2. ~/.local/bin/anynotate (the installer's default)
+#   3. anynotate on PATH
+#
+#   anynotate-run --locate   prints the path it would run and exits
+
+set -eu
+
+locate() {
+  for candidate in "${ANYNOTATE_BIN_DIR:+$ANYNOTATE_BIN_DIR/anynotate}" "${HOME:+$HOME/.local/bin/anynotate}"; do
+    if [ -n "$candidate" ] && [ -f "$candidate" ] && [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  command -v anynotate 2>/dev/null
+}
+
+if ! exe=$(locate) || [ -z "$exe" ]; then
+  message="anynotate is not installed. Install it with: curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh"
+  printf 'anynotate-run: %s\n' "$message" >&2
+  if [ -n "${HERDR_BIN_PATH:-}" ] && [ "${1:-}" != "--locate" ]; then
+    "$HERDR_BIN_PATH" notification show "Anynotate" --body "$message" >/dev/null 2>&1 || true
+  fi
+  exit 127
+fi
+
+if [ "${1:-}" = "--locate" ]; then
+  printf '%s\n' "$exe"
+  exit 0
+fi
+
+exec "$exe" "$@"

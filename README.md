@@ -70,6 +70,9 @@ anynotate bridge              # run the bridge in the foreground instead (defaul
 anynotate token               # print the bridge token (created on first use, mode 600)
 anynotate annotations         # list the 10 newest bundles
 anynotate annotations latest  # print one bundle's README (or pass an id); a queued bundle becomes delivered
+anynotate inbox               # browse bundles: read, send to a herdr pane, delete (--plain prints a list)
+anynotate deliver latest --pane <pane_id>   # type a bundle (or pass an id) into a herdr agent pane; --dry-run to preview
+anynotate status              # one-line health summary; --notify shows it as a herdr notification
 ```
 
 `install` adds the prompt hook and `annotations` skill only for CLIs it finds (`claude` / `codex` on `PATH`, or `~/.claude` / `~/.codex`) and logs `skip <cli> (not installed)` for the rest. `install` also removes Gemini CLI hooks left by older Anynotate versions (backup `.bak-anynotate`), and `~/.gemini/commands/annotations.toml` if it is unchanged.
@@ -82,6 +85,30 @@ An agent needs no Anynotate-specific setup to receive notes:
 - Anywhere else, the agent can read `~/.anynotate/inbox/latest/README.md` or run `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
 
 The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt.
+
+### herdr plugin
+
+```bash
+herdr plugin install genexk/anynotate/integrations/herdr   # herdr 0.9.0 or later; installs Anynotate too if needed
+```
+
+On macOS and Linux (Windows support for the plugin is coming), it adds an inbox popup (`anynotate inbox`), an action that sends the latest notes to the focused agent pane, a status check shown as a herdr notification, and Ctrl-click on a bundle's `README.md` path in any pane to open it in the inbox. It also starts the bridge with the herdr server. The plugin binds no keys; add these to `~/.config/herdr/config.toml`:
+
+```toml
+[[keys.command]]
+key = "prefix+i"
+type = "plugin_action"
+command = "anynotate.open-inbox"
+description = "Anynotate inbox"
+
+[[keys.command]]
+key = "prefix+y"
+type = "plugin_action"
+command = "anynotate.send-latest-here"
+description = "send the latest browser note to this agent"
+```
+
+See [integrations/herdr](./integrations/herdr/README.md) for every action, the link handler and uninstalling.
 
 ### Extension access
 

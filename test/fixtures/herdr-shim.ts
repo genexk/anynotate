@@ -17,4 +17,10 @@ if (command === "agent prompt" && process.env.HERDR_SHIM_ON_PROMPT) {
   const r = Bun.spawnSync(argv, { stdin: new TextEncoder().encode(stdin), stdout: "pipe", stderr: "inherit" });
   appendFileSync(need("HERDR_SHIM_ON_PROMPT_OUT"), `[${r.stdout.toString().replace(/\n+$/, "")}]\n`);
 }
+// HERDR_SHIM_FAIL is JSON { "<group> <command>": { code, stderr } }: that command fails with that exit code and stderr.
+const fail = (JSON.parse(process.env.HERDR_SHIM_FAIL ?? "{}") as Record<string, { code: number; stderr?: string }>)[command];
+if (fail) {
+  process.stderr.write(fail.stderr ?? "");
+  process.exit(fail.code);
+}
 process.exit(Number(process.env.HERDR_SHIM_EXIT ?? 0));

@@ -95,7 +95,7 @@ function ageStart(id: string, dir: string): number {
 }
 
 // A claim older than STALE_CLAIM_MS belongs to a dead process, so it does not protect the bundle.
-function hasActiveClaim(dir: string, now: number): boolean {
+export function hasActiveClaim(dir: string, now = Date.now()): boolean {
   return readdirSync(dir).some((n) => {
     if (!n.startsWith("status.json.claim-")) return false;
     try {
@@ -106,17 +106,27 @@ function hasActiveClaim(dir: string, now: number): boolean {
   });
 }
 
+// The real path of <root>/<id> only when id is a bundle id and that entry is a plain directory directly inside root.
+export function bundleFolderIn(root: string, id: string): string | null {
+  if (!BUNDLE_ID.test(id)) return null;
+  try {
+    const realRoot = realpathSync(root);
+    const path = join(realRoot, id);
+    const st = lstatSync(path);
+    if (st.isSymbolicLink() || !st.isDirectory()) return null;
+    return dirname(realpathSync(path)) === realRoot ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 function expiredIn(root: string, cutoff: number, now: number): { id: string; path: string }[] {
   if (!existsSync(root)) return [];
-  const realRoot = realpathSync(root);
   const out: { id: string; path: string }[] = [];
   for (const id of readdirSync(root).sort()) {
-    if (!BUNDLE_ID.test(id)) continue;
-    const path = join(realRoot, id);
+    const path = bundleFolderIn(root, id);
+    if (!path) continue;
     try {
-      const st = lstatSync(path);
-      if (st.isSymbolicLink() || !st.isDirectory()) continue;
-      if (dirname(realpathSync(path)) !== realRoot) continue;
       if (hasActiveClaim(path, now)) continue;
       if (!(ageStart(id, path) < cutoff)) continue;
       out.push({ id, path });

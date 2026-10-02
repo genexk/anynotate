@@ -120,6 +120,20 @@ export async function detachBridge(c: Control, argv: string[], startTimeoutMs = 
   return 1;
 }
 
+// For callers that run on every start of something else (herdr's startup hook): a no-op when a bridge answers or an
+// installed service owns the bridge, so a second bridge is never started next to the service's.
+export async function ensureBridge(c: Control, argv: string[], serviceFile: string | null): Promise<number> {
+  if (await answersOf(c)(c.port)) {
+    c.log(`bridge already running on http://127.0.0.1:${c.port}`);
+    return 0;
+  }
+  if (serviceFile !== null) {
+    c.log(`bridge not answering, but it is managed by the service in ${serviceFile}; not starting another`);
+    return 0;
+  }
+  return detachBridge(c, argv);
+}
+
 const alive = (pid: number) => {
   try {
     process.kill(pid, 0);

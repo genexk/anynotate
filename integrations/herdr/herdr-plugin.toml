@@ -1,0 +1,69 @@
+id = "anynotate"
+name = "Anynotate"
+version = "0.5.0"
+min_herdr_version = "0.9.0"
+platforms = ["linux", "macos"]
+description = "Browser annotations for your coding agents: browse the Anynotate inbox in a popup, send the latest note to the focused agent pane, and Ctrl-click a bundle path to open it."
+
+# Commands run without a shell, from this directory. Everything goes through
+# bin/anynotate-run (finds the installed anynotate, which is often not on the
+# herdr server's PATH) or bin/anynotate-plugin (reads herdr's environment).
+# macOS and Linux only for now: the .ps1 and .cmd scripts in bin/ and
+# build.ps1 are not referenced here and are untested.
+
+[[build]]
+command = ["sh", "build.sh"]
+platforms = ["linux", "macos"]
+
+# Start the bridge unless one answers or the installed service owns it.
+[[startup]]
+command = ["bin/anynotate-run", "bridge", "--ensure"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "inbox"
+title = "Anynotate inbox"
+placement = "popup"
+width = "80%"
+height = "70%"
+command = ["bin/anynotate-plugin", "inbox-pane"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "open-inbox"
+title = "Anynotate: open inbox"
+description = "Open the Anynotate inbox in a popup."
+command = ["bin/anynotate-plugin", "open-inbox"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "send-latest-here"
+title = "Anynotate: send latest note here"
+description = "Deliver the newest browser note to the focused agent pane and show the result as a notification."
+contexts = ["pane"]
+command = ["bin/anynotate-plugin", "send-here"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "status"
+title = "Anynotate: status"
+description = "Check the bridge, browser hosts and agent hooks; the summary appears as a notification."
+command = ["bin/anynotate-run", "status", "--notify"]
+platforms = ["linux", "macos"]
+
+# Target of the link handler below; opens the inbox on the clicked bundle.
+[[actions]]
+id = "open-bundle"
+title = "Anynotate: open clicked bundle"
+description = "Open the inbox popup on the bundle whose README.md was Ctrl-clicked."
+command = ["bin/anynotate-plugin", "open-link"]
+platforms = ["linux", "macos"]
+
+# <anything>/.anynotate/inbox/<bundle-id>/README.md, with / or \ separators,
+# from ~, an absolute path or a file:// link.
+[[link_handlers]]
+id = "bundle-readme"
+title = "Open in the Anynotate inbox"
+pattern = '^(?:file://)?\S*[/\\]\.anynotate[/\\]inbox[/\\][0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}-[a-z0-9-]+[/\\]README\.md$'
+action = "open-bundle"
+platforms = ["linux", "macos"]

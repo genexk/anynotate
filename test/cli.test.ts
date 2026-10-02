@@ -219,6 +219,22 @@ test("bridge --detach starts a bridge with a pid file; --status and --stop contr
   }
 }, 30_000);
 
+test("bridge --ensure leaves the bridge to an installed service instead of starting another", async () => {
+  const env = { ANYNOTATE_PORT: freePort() };
+  const service =
+    process.platform === "darwin"
+      ? join(home, "Library", "LaunchAgents", "dev.anynotate.bridge.plist")
+      : process.platform === "win32"
+        ? join(home, "data", "bridge.vbs")
+        : join(home, ".config", "systemd", "user", "anynotate-bridge.service");
+  mkdirSync(join(service, ".."), { recursive: true });
+  writeFileSync(service, "");
+  const r = await run(["bridge", "--ensure"], env);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain("managed by the service");
+  expect(existsSync(join(home, "data", "bridge.pid"))).toBe(false);
+});
+
 test("bridge --stop leaves a pid alone when no bridge answers, and drops the stale pid file", async () => {
   const env = { ANYNOTATE_PORT: freePort() };
   mkdirSync(join(home, "data"), { recursive: true });

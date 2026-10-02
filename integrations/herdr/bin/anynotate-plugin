@@ -1,0 +1,128 @@
+#!/bin/sh
+# herdr glue for the Anynotate plugin. herdr runs commands without a shell,
+# so anything that reads herdr's environment lives here.
+#
+#   anynotate-plugin send-here    deliver the latest note to the focused pane
+#   anynotate-plugin open-inbox   open the inbox popup
+#   anynotate-plugin open-link    open the inbox popup on the clicked bundle
+#   anynotate-plugin inbox-pane   the popup's own command
+
+set -eu
+LC_ALL=C
+export LC_ALL
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$here")
+run="$here/anynotate-run"
+herdr=${HERDR_BIN_PATH:-herdr}
+plugin_id=${HERDR_PLUGIN_ID:-anynotate}
+
+notify() {
+  "$herdr" notification show "Anynotate" --body "$1" >/dev/null 2>&1 || true
+}
+
+# Patterns are matched with case, which sees the whole value: a newline is just
+# another character outside the allowed set, so it cannot smuggle a second line
+# past a line-by-line grep.
+is_bundle_id() {
+  case $1 in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]-?*) ;;
+    *) return 1 ;;
+  esac
+  case ${1#*T??????-} in
+    *[!abcdefghijklmnopqrstuvwxyz0123456789-]*) return 1 ;;
+  esac
+}
+
+is_pane_id() {
+  case $1 in
+    [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-]*) return 1 ;;
+  esac
+}
+
+focused_pane() {
+  pane=""
+  if [ -n "${HERDR_PLUGIN_CONTEXT_JSON:-}" ]; then
+    pane=$(printf '%s\n' "$HERDR_PLUGIN_CONTEXT_JSON" \
+      | sed -n 's/.*"focused_pane_id"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p' | head -n 1)
+  fi
+  if [ -z "$pane" ]; then
+    pane=${HERDR_PANE_ID:-}
+  fi
+  if is_pane_id "$pane"; then
+    printf '%s\n' "$pane"
+  fi
+}
+
+bundle_from_url() {
+  path=${1#file://}
+  path=${path%README.md}
+  path=${path%/}
+  path=${path%\\}
+  id=${path##*/}
+  id=${id##*\\}
+  if is_bundle_id "$id"; then
+    printf '%s\n' "$id"
+  fi
+}
+
+open_pane() {
+  if [ -n "${1:-}" ]; then
+    "$herdr" plugin pane open --plugin "$plugin_id" --entrypoint inbox --cwd "$root" --env "ANYNOTATE_INBOX_SELECT=$1"
+  else
+    "$herdr" plugin pane open --plugin "$plugin_id" --entrypoint inbox --cwd "$root"
+  fi
+}
+
+case "${1:-}" in
+  send-here)
+    if ! "$run" --locate >/dev/null 2>&1; then
+      notify "anynotate is not installed. Install it with: curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh"
+      exit 127
+    fi
+    pane=$(focused_pane)
+    if [ -z "$pane" ]; then
+      notify "No focused pane to send the latest note to."
+      exit 1
+    fi
+    status=0
+    output=$("$run" deliver latest --pane "$pane" 2>&1) || status=$?
+    printf '%s\n' "$output"
+    summary=$(printf '%s\n' "$output" | sed '/^[[:space:]]*$/d' | tail -n 1)
+    if [ -z "$summary" ]; then
+      if [ "$status" -eq 0 ]; then
+        summary="Sent the latest note to pane $pane."
+      else
+        summary="Could not send the latest note to pane $pane (exit $status)."
+      fi
+    fi
+    notify "$summary"
+    exit "$status"
+    ;;
+  open-inbox)
+    open_pane ""
+    ;;
+  open-link)
+    id=$(bundle_from_url "${HERDR_PLUGIN_CLICKED_URL:-}")
+    if [ -z "$id" ]; then
+      notify "That link is not an Anynotate bundle README."
+      exit 1
+    fi
+    open_pane "$id"
+    ;;
+  inbox-pane)
+    select=${ANYNOTATE_INBOX_SELECT:-}
+    if [ -n "$select" ] && is_bundle_id "$select"; then
+      exec "$run" inbox --select "$select"
+    fi
+    exec "$run" inbox
+    ;;
+  *)
+    printf 'usage: anynotate-plugin <send-here|open-inbox|open-link|inbox-pane>\n' >&2
+    exit 2
+    ;;
+esac
