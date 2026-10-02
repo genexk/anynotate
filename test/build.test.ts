@@ -13,8 +13,8 @@ const repo = join(import.meta.dir, "..");
 const read = (rel: string) => readFileSync(join(repo, rel), "utf8");
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-test("the release is 0.4.0", () => {
-  expect(pkg.version).toBe("0.4.0");
+test("the release is 0.4.1", () => {
+  expect(pkg.version).toBe("0.4.1");
 });
 
 test("every target's file is the asset name self-update downloads", () => {
@@ -86,7 +86,7 @@ describe.skipIf(!compileWorks || !host || process.platform === "win32")("the com
           return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
         };
 
-        expect(run("--version").out.trim()).toBe("0.4.0");
+        expect(run("--version").out.trim()).toBe("0.4.1");
 
         const pinned = `chrome-extension://${(JSON.parse(read("assets/extension-ids.json")) as string[])[0]}/`;
         const askToken = (...args: string[]) => {
@@ -107,7 +107,8 @@ describe.skipIf(!compileWorks || !host || process.platform === "win32")("the com
         const toml = join(home, ".gemini", "commands", "annotations.toml");
         mkdirSync(join(home, ".gemini", "commands"), { recursive: true });
         writeFileSync(toml, read("assets/gemini/annotations.toml"));
-        const origin = `chrome-extension://${(JSON.parse(read("assets/extension-ids.json")) as string[])[0]}`;
+        const origins = (JSON.parse(read("assets/extension-ids.json")) as string[]).map((id) => `chrome-extension://${id}`);
+        const origin = origins[0]!;
 
         const dry = run("install", "--dry-run");
         expect(dry.out).toContain(join(home, ".claude", "skills", "annotations", "SKILL.md"));
@@ -118,10 +119,10 @@ describe.skipIf(!compileWorks || !host || process.platform === "win32")("the com
         const real = run("install");
         if (real.code !== 0) throw new Error(`install exited ${real.code}: ${real.err}`);
         expect(readFileSync(join(home, ".claude", "skills", "annotations", "SKILL.md"), "utf8")).toBe(read("assets/skill/SKILL.md"));
-        expect(readFileSync(join(home, ".anynotate", "origins"), "utf8")).toBe(`${origin}\n`);
+        expect(readFileSync(join(home, ".anynotate", "origins"), "utf8")).toBe(origins.map((o) => `${o}\n`).join(""));
         expect(existsSync(toml)).toBe(false);
         const record = JSON.parse(readFileSync(join(home, ".anynotate", "install.json"), "utf8"));
-        expect(record).toMatchObject({ kind: "binary", path: exe, version: "0.4.0" });
+        expect(record).toMatchObject({ kind: "binary", path: exe, version: "0.4.1" });
         expect(existsSync(join(home, ".anynotate", "native-host"))).toBe(false);
       } finally {
         rmSync(work, { recursive: true, force: true });

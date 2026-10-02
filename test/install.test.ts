@@ -37,7 +37,7 @@ const planFor = (o: Partial<InstallOptions> = {}) =>
     home,
     env: {},
     kind: src(),
-    version: "0.4.0",
+    version: "0.4.1",
     uid: 501,
     hasUserSystemd: false,
     installed: ALL,
@@ -276,11 +276,13 @@ posixOnly("our Gemini command file is removed; one the user changed is kept", ()
 });
 
 const EXT_IDS = JSON.parse(readFileSync(join(process.cwd(), "assets/extension-ids.json"), "utf8")) as string[];
-const EXT_ORIGIN = `chrome-extension://${EXT_IDS[0]}`;
+const EXT_ORIGINS = EXT_IDS.map((id) => `chrome-extension://${id}`);
+const EXT_ORIGIN = EXT_ORIGINS[0]!;
+const EXT_LINES = EXT_ORIGINS.map((o) => `${o}\n`).join("");
 const originsFile = () => join(home, ".anynotate/origins");
 
-test("assets/extension-ids.json pins the dev extension id", () => {
-  expect(EXT_IDS).toEqual(["epdjidoapjkdefnpaibacfepphipdioh"]);
+test("assets/extension-ids.json pins the dev and Chrome Web Store extension ids", () => {
+  expect(EXT_IDS).toEqual(["epdjidoapjkdefnpaibacfepphipdioh", "lefcmfmbmjmgfkgbbcodolcecbnfjgpp"]);
 });
 
 test("extensionOrigins keeps valid ids in file order and drops the rest", () => {
@@ -297,14 +299,19 @@ test("extensionOrigins keeps valid ids in file order and drops the rest", () => 
 });
 
 posixOnly("install pre-allows every pinned extension origin, once", () => {
-  expect(EXT_ORIGIN).toMatch(/^chrome-extension:\/\/[a-p]{32}$/);
-  expect(apply(plan(), true)).toContain(`would add origin ${EXT_ORIGIN}`);
+  for (const o of EXT_ORIGINS) expect(o).toMatch(/^chrome-extension:\/\/[a-p]{32}$/);
+  const dryLog = apply(plan(), true);
+  for (const o of EXT_ORIGINS) expect(dryLog).toContain(`would add origin ${o}`);
   expect(existsSync(originsFile())).toBe(false);
-  expect(apply(plan(), false)).toContain(`added   origin ${EXT_ORIGIN} → ${originsFile()}`);
-  expect(readFileSync(originsFile(), "utf8")).toBe(`${EXT_ORIGIN}\n`);
+  const log = apply(plan(), false);
+  for (const o of EXT_ORIGINS) expect(log).toContain(`added   origin ${o} → ${originsFile()}`);
+  expect(readFileSync(originsFile(), "utf8")).toBe(EXT_LINES);
   expect(statSync(originsFile()).mode & 0o777).toBe(0o600);
-  for (const dry of [true, false]) expect(apply(plan(), dry)).toContain(`ok      origin ${EXT_ORIGIN}`);
-  expect(readFileSync(originsFile(), "utf8")).toBe(`${EXT_ORIGIN}\n`);
+  for (const dry of [true, false]) {
+    const again = apply(plan(), dry);
+    for (const o of EXT_ORIGINS) expect(again).toContain(`ok      origin ${o}`);
+  }
+  expect(readFileSync(originsFile(), "utf8")).toBe(EXT_LINES);
 });
 
 posixOnly("origins already allowed are kept when the extension's is added", () => {
@@ -312,7 +319,7 @@ posixOnly("origins already allowed are kept when the extension's is added", () =
   mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
   writeFileSync(originsFile(), `${other}\n`, { mode: 0o600 });
   apply(plan(), false);
-  expect(readFileSync(originsFile(), "utf8")).toBe(`${other}\n${EXT_ORIGIN}\n`);
+  expect(readFileSync(originsFile(), "utf8")).toBe(`${other}\n${EXT_LINES}`);
 });
 
 posixOnly("without a readable extension-ids.json the origin step is skipped", () => {
@@ -344,7 +351,7 @@ posixOnly("the host manifest names the wrapper and allows pinned plus added exte
     description: "Anynotate helper",
     path: wrapperPath(),
     type: "stdio",
-    allowed_origins: [`${EXT_ORIGIN}/`, `${dev}/`],
+    allowed_origins: [...EXT_ORIGINS.map((o) => `${o}/`), `${dev}/`],
   });
 });
 
@@ -352,7 +359,7 @@ posixOnly("the host manifest lists a pinned id once even when the origins file h
   mkdirSync(join(home, ".anynotate"), { mode: 0o700 });
   writeFileSync(originsFile(), `${EXT_ORIGIN}\n`, { mode: 0o600 });
   apply(hostPlan(), false);
-  expect(JSON.parse(readFileSync(manifestPath(), "utf8")).allowed_origins).toEqual([`${EXT_ORIGIN}/`]);
+  expect(JSON.parse(readFileSync(manifestPath(), "utf8")).allowed_origins).toEqual(EXT_ORIGINS.map((o) => `${o}/`));
 });
 
 posixOnly("dry-run writes no helper files, and a re-run reports them ok", () => {
@@ -532,7 +539,7 @@ test("a dry run lists the service start commands and runs nothing", () => {
 posixOnly("apply writes install.json and starts the service", () => {
   apply(plan(), false);
   expect(JSON.parse(readFileSync(join(home, ".anynotate/install.json"), "utf8"))).toEqual({
-    kind: "source", path: REPO, version: "0.4.0", installedAt: "2026-10-01T12:00:00.000Z", platform: "darwin",
+    kind: "source", path: REPO, version: "0.4.1", installedAt: "2026-10-01T12:00:00.000Z", platform: "darwin",
   });
   expect(statSync(join(home, ".anynotate/install.json")).mode & 0o777).toBe(0o600);
   expect(calls).toEqual([
