@@ -291,7 +291,8 @@
       link.addEventListener("click", (e) => {
         const img = link.querySelector("img");
         e.preventDefault();
-        big.src = img.currentSrc || link.href;
+        const source = Array.from(link.querySelectorAll("source")).find((el) => matchMedia(el.media).matches);
+        big.src = source ? source.srcset : link.href;
         big.alt = img.alt;
         box.showModal();
       });
