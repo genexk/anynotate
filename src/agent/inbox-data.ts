@@ -4,11 +4,13 @@ import { Bundle, BUNDLE_ID, Status } from "@anynotate/protocol";
 import { archiveDir, inboxDir } from "../inbox/paths";
 import { bundleFolderIn, hasActiveClaim } from "../inbox/retention";
 import { listBundles, repointLatestIfGone } from "../inbox/store";
+import { inboxOnly } from "../inbox/target";
 import type { InboxRow } from "./inbox-view";
 
 export function targetLabel(bundle: Bundle, status: Status | null): string {
   const t = bundle.target;
   const herdr = status?.via === "herdr" && status.session ? status : null;
+  if (!herdr && inboxOnly(t)) return "inbox";
   const agent = herdr?.agent ?? t.agent;
   const where = herdr?.session || t.pane || t.sessionId?.slice(0, 8) || (t.cwd ? basename(t.cwd) : "");
   return where ? `${agent} · ${where}` : agent;

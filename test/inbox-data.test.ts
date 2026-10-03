@@ -27,6 +27,11 @@ test("rows come newest first with status, note count and a target label", () => 
   expect(rows[1]).toMatchObject({ state: "acked", target: "claude · s-1" });
 });
 
+test("an inbox-only bundle's target label is the inbox", () => {
+  const b = writeBundle({ ...sampleInput, target: { agent: "claude" } }, {});
+  expect(rowFor(b, null).target).toBe("inbox");
+});
+
 test("the target label prefers the herdr pane a bundle was delivered to", () => {
   const b = writeBundle(sampleInput, {}, at(9));
   updateStatus(b.id, "t", (s) => ({ ...s, state: "delivered", via: "herdr", session: "w2:p1" }));

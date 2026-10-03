@@ -25,6 +25,12 @@ test("header carries title, url, count and target", () => {
   expect(md).toContain("target: claude @ /tmp/repo");
 });
 
+test("an inbox-only target reads as the inbox for any agent", () => {
+  const md = renderReadme(Bundle.parse({ ...bundle, target: { agent: "claude" } }), uploaded);
+  expect(md).toContain("target: inbox (any agent)");
+  expect(md).not.toContain("claude @");
+});
+
 test("each annotation has location, quote or element, comment and crop", () => {
   const md = renderReadme(bundle, uploaded);
   expect(md).toContain('## A1 · text · question · under "Ingredients"');

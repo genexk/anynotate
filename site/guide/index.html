@@ -46,6 +46,7 @@
         <li><a href="#send">Send to an agent</a></li>
         <li><a href="#agent">What the agent sees</a></li>
         <li><a href="#inbox">Use the herdr inbox</a></li>
+        <li><a href="#mcp">Use with Claude Desktop, Codex or Cursor</a></li>
         <li><a href="#settings">Settings and storage</a></li>
         <li><a href="#trouble">Troubleshooting</a></li>
       </ol>
@@ -183,7 +184,7 @@
       </ol>
       <div class="shots">
         <figure class="shot small">
-          <a class="zoom" href="../img/guide/6-target-list.png"><img src="../img/guide/6-target-list.png" width="360" height="499" loading="lazy" alt="The session picker opened as a list: under herdr panes, claude · recipes · soup and codex · shop · pricing; under Inbox, claude · save to inbox and codex · save to inbox."></a>
+          <a class="zoom" href="../img/guide/6-target-list.png"><img src="../img/guide/6-target-list.png" width="360" height="488" loading="lazy" alt="The session picker opened as a list: under herdr panes, claude · recipes · soup and codex · shop · pricing; under Inbox, a single option, Inbox · any agent can read it."></a>
           <figcaption>Pick a session.</figcaption>
         </figure>
         <figure class="shot small">
@@ -202,7 +203,7 @@
             <tr><td>⚡ push</td><td>A session connected live to the bridge gets the notes right away.</td></tr>
             <tr><td>⌨ herdr panes</td><td>Any agent running in a herdr pane: the notes are typed into the pane as soon as it is idle.</td></tr>
             <tr><td>⏳ next prompt</td><td>A Claude Code or Codex session gets the notes with the next thing you type there.</td></tr>
-            <tr><td>📥 Inbox</td><td>Saved for later. Any agent can read them with <code>/annotations</code> or <code>anynotate annotations latest</code>.</td></tr>
+            <tr><td>📥 Inbox</td><td>Saved for later, for any agent or app: it reads them when you ask, with <code>/annotations</code>, <code>anynotate annotations latest</code> or over MCP.</td></tr>
           </tbody>
         </table>
       </div>
@@ -257,8 +258,31 @@
       </figure>
     </section>
 
+    <section class="guide-section" id="mcp" aria-labelledby="mcp-title">
+      <h2 id="mcp-title"><span class="n" aria-hidden="true">10</span>Use with Claude Desktop, Codex or Cursor</h2>
+      <p>Desktop apps have no prompt hook and no terminal to type into, so they read your notes through a small MCP server built into Anynotate. It runs on your computer and never goes online.</p>
+      <ol class="howto">
+        <li><strong>See which apps Anynotate finds.</strong> Nothing is changed yet.
+          <div class="cmd">
+            <pre><code id="cmd-mcp-list">anynotate mcp install</code></pre>
+            <button class="copy" type="button" data-copy="cmd-mcp-list">Copy</button>
+          </div>
+        </li>
+        <li><strong>Add it to the apps you use</strong> with <code>--claude-desktop</code>, <code>--codex</code>, <code>--cursor</code> or <code>--claude-code</code>. Anynotate keeps everything else in each app's settings and saves a backup first.
+          <div class="cmd">
+            <pre><code id="cmd-mcp-install">anynotate mcp install --claude-desktop --cursor</code></pre>
+            <button class="copy" type="button" data-copy="cmd-mcp-install">Copy</button>
+          </div>
+        </li>
+        <li><strong>Restart the app.</strong> It now lists the Anynotate tools: <code>list_notes</code>, <code>read_notes</code>, <code>mark_done</code> and <code>get_screenshot</code>.</li>
+        <li><strong>Send your notes to the 📥 Inbox</strong> in the extension, then ask the app to <em>read my browser notes</em>. In Claude Desktop you can also pick <strong>review-browser-notes</strong> from the <strong>+</strong> menu.</li>
+        <li><strong>The app marks them done</strong> when it has acted on them, and the extension shows them as handled, as it does for the terminal agents.</li>
+      </ol>
+      <p>To remove it again, run <code>anynotate mcp uninstall</code> with the same flags.</p>
+    </section>
+
     <section class="guide-section" id="settings" aria-labelledby="settings-title">
-      <h2 id="settings-title"><span class="n" aria-hidden="true">10</span>Settings and storage</h2>
+      <h2 id="settings-title"><span class="n" aria-hidden="true">11</span>Settings and storage</h2>
       <p>Open the extension's options from its menu (right-click the Anynotate icon, then <strong>Options</strong>).</p>
       <ul class="howto plain">
         <li><strong>Bridge</strong> shows whether the bridge answers, how many sessions it sees, and the extension and bridge versions.</li>
@@ -273,7 +297,7 @@
     </section>
 
     <section class="guide-section" id="trouble" aria-labelledby="trouble-title">
-      <h2 id="trouble-title"><span class="n" aria-hidden="true">11</span>Troubleshooting</h2>
+      <h2 id="trouble-title"><span class="n" aria-hidden="true">12</span>Troubleshooting</h2>
       <p>One command checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix:</p>
       <div class="cmd">
         <pre><code id="cmd-doctor">anynotate doctor</code></pre>

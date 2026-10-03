@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Status } from "@anynotate/protocol";
 import { BUNDLE_ID, bundleDir, latestBundleId, listBundles, readBundle, readStatus, updateStatus } from "../inbox/store";
+import { inboxOnly } from "../inbox/target";
 
 // Applied under the claim: a status that moved on since readStatus is kept as is.
 export function pullTransition(s: Status): Status {
@@ -17,7 +18,7 @@ export function runAnnotations(args: string[]): string {
       .map(({ bundle, status }) => {
         // A null status means another process holds the claim right now.
         const st = status ? (status.via ? `${status.state}(${status.via})` : status.state) : "busy";
-        return `${bundle.id}  ${st}  ${bundle.target.agent}  "${bundle.title}"`;
+        return `${bundle.id}  ${st}  ${inboxOnly(bundle.target) ? "inbox" : bundle.target.agent}  "${bundle.title}"`;
       })
       .join("\n");
   }

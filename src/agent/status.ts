@@ -18,6 +18,8 @@ export function summarizeChecks(checks: Check[], version: string): { line: strin
     const counts = [warnings ? plural(warnings, "warning") : "", skipped ? `${skipped} skipped` : ""].filter(Boolean);
     parts.push(counts.length ? counts.join(", ") : "all checks passed");
   }
+  const mcp = checks.filter((c) => c.mcp === "configured").map((c) => /^mcp \((.+)\)$/.exec(c.name)?.[1] ?? c.name);
+  if (mcp.length) parts.push(`MCP: ${mcp.join(", ")}`);
   return { line: parts.join(" · "), code: failed.length ? 1 : 0 };
 }
 

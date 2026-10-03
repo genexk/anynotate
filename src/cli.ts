@@ -28,6 +28,9 @@ import { loadOrCreateToken } from "./bridge/token";
 import { describeRetention, pruneBundles, resolveRetention, startRetentionSweeps, writeRetentionSetting } from "./inbox/retention";
 import { archiveOlderThan } from "./inbox/store";
 import { Agent } from "@anynotate/protocol";
+import { createMcpServer, serveStdio } from "./mcp/server";
+import { anynotatePrompts, anynotateTools, MCP_INSTRUCTIONS } from "./mcp/tools";
+import { MCP_SETUP_USAGE, runMcpSetup } from "./mcp/install";
 
 function writeAll(data: string | Uint8Array) {
   const buf = typeof data === "string" ? Buffer.from(data) : data;
@@ -71,6 +74,7 @@ function doctorChecks() {
     fetchHealth: () => readHealth(port),
     port,
     externalDryRun,
+    mcpEntry: commandArgv(detectInstallKind()),
   });
 }
 
@@ -132,6 +136,34 @@ switch (cmd) {
     process.exit(
       await runInbox(rest, { stdin: process.stdin, stdout: process.stdout, env: process.env, log: (line) => console.log(line), err: (line) => console.error(line) }),
     );
+  case "mcp": {
+    if (rest[0] === "install" || rest[0] === "uninstall") {
+      process.exit(
+        runMcpSetup(rest, {
+          platform: currentPlatform(),
+          home: homedir(),
+          env: process.env,
+          entry: commandArgv(detectInstallKind()),
+          which: (c) => Bun.which(c),
+          exec,
+          log: (line) => console.log(line),
+        }),
+      );
+    }
+    if (rest.length) {
+      console.error(MCP_SETUP_USAGE);
+      process.exit(1);
+    }
+    const server = createMcpServer({
+      name: "anynotate",
+      version: pkg.version,
+      instructions: MCP_INSTRUCTIONS,
+      tools: anynotateTools(),
+      prompts: anynotatePrompts,
+    });
+    await serveStdio(server, Bun.stdin.stream(), writeAll);
+    process.exit(0);
+  }
   case "token":
     console.log(loadOrCreateToken());
     break;
@@ -320,6 +352,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <--version|bridge [--ensure|--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|deliver <id|latest> --pane <pane-id> [--dry-run]|inbox [--select <id|latest>] [--plain]|token|install [--dry-run] [--no-hints]|doctor|status [--notify]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <--version|bridge [--ensure|--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|deliver <id|latest> --pane <pane-id> [--dry-run]|inbox [--select <id|latest>] [--plain]|mcp [install|uninstall [--<app>] [--dry-run]]|token|install [--dry-run] [--no-hints]|doctor|status [--notify]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

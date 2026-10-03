@@ -57,7 +57,7 @@ export type Exchange = {
   response: { schema: SchemaName; example: unknown };
 };
 
-const health = { ok: true, bridgeVersion: "0.5.1", protocol: { version: 2, min: 1 } };
+const health = { ok: true, bridgeVersion: "0.6.0", protocol: { version: 2, min: 1 } };
 const queued = { state: "queued", at: "2026-09-24T15:32:01.000Z" };
 const exampleBundle = { ...exampleBundleInput, id: EXAMPLE_BUNDLE_ID, files: { page: "page.md", screenshot: "screenshot.png" } };
 

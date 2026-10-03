@@ -9,10 +9,11 @@ import { BROWSERS, browserConfigRoot, browserRegistryKey, type Browser, type Env
 import { LAUNCHD_LABEL, planService, SYSTEMD_UNIT, WINDOWS_TASK } from "../platform/service";
 import { HOOKED_CLIS, isAnynotateHook } from "./install";
 import { INSTALL_RECORD, type InstallRecord } from "./installkind";
+import { mcpChecks } from "../mcp/install";
 
 // ok is false for a failed required check, "warn" for something worth fixing that doesn't stop Anynotate working.
 // skipped marks a check an external dry run did not perform; it shows as a warning and is counted separately.
-export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true };
+export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" };
 
 export type DoctorOptions = {
   platform: Platform;
@@ -32,6 +33,8 @@ export type DoctorOptions = {
   port?: number;
   // Report the checks that run external commands (service, registry) as skipped instead of running them.
   externalDryRun?: boolean;
+  // The anynotate command line apps should run as their MCP server; without it the MCP checks are left out.
+  mcpEntry?: string[];
 };
 
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -233,6 +236,7 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     token(),
     ...present.map(nativeHost),
     ...HOOKED_CLIS.map(({ cli, settings }) => hooks(cli, settings)),
+    ...(o.mcpEntry ? mcpChecks({ platform, home, env, entry: o.mcpEntry, which, exec, log: () => {}, exists, readFile }) : []),
     retention(),
   ];
 }

@@ -82,9 +82,37 @@ anynotate status              # one-line health summary; --notify shows it as a 
 An agent needs no Anynotate-specific setup to receive notes:
 
 - In a herdr pane, any agent herdr detects is listed in the dock, and a bundle sent to it is typed into the pane as the bundle's README path.
-- Anywhere else, the agent can read `~/.anynotate/inbox/latest/README.md` or run `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
+- Anywhere else, send to the 📥 Inbox in the dock, one target for every agent. Any agent reads it when asked: with `/annotations`, over MCP, from `~/.anynotate/inbox/latest/README.md` or with `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
 
 The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt.
+
+### Desktop apps (MCP)
+
+Apps without hooks or a terminal, such as Claude Desktop, the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. Set it up per app; `install` does not do this for you:
+
+```bash
+anynotate mcp install                                  # list the apps found and what each flag would change
+anynotate mcp install --claude-desktop --cursor        # also --codex, --claude-code; add --dry-run to preview
+anynotate mcp uninstall --cursor                       # remove the entry again
+```
+
+| Flag | Writes |
+|---|---|
+| `--claude-desktop` | `mcpServers.anynotate` in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows; the Microsoft Store build's `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude` when it exists); there is no Claude Desktop for Linux |
+| `--cursor` | `mcpServers.anynotate` in `~/.cursor/mcp.json` |
+| `--codex` | a `[mcp_servers.anynotate]` table in `~/.codex/config.toml` (Codex CLI and app) |
+| `--claude-code` | runs `claude mcp add --scope user anynotate -- <anynotate> mcp`, or prints it when `claude` is not on `PATH` |
+
+Each entry runs this `anynotate` binary by its absolute path with the argument `mcp`. Only that entry's `command` and `args` are set; everything else in the file, including other keys you add to the entry, is kept, a timestamped `.bak-anynotate-…` copy is written first, and a file that doesn't parse is left alone. Restart the app afterwards. `anynotate doctor` shows an `mcp (<app>)` line per app.
+
+The server offers four tools and one prompt (`review-browser-notes`, in Claude Desktop's "+" menu):
+
+- `list_notes` — recent bundles with status, page title and URL (`limit`, `status`).
+- `read_notes` — a bundle's notes as text plus the cropped screenshots as images. Text copied from the page (title, quotes, element text, page text) is fenced off and marked as untrusted data, so the app doesn't take it for instructions (`id`, default the latest; `include_crops`; `include_page_text` adds up to 20 KB of page text around the notes). Crops that would push the reply past about 900 KB are listed by path instead. Reading a queued bundle marks it delivered, so a prompt hook won't deliver it again.
+- `mark_done` — marks a bundle done with an optional one-line summary; the extension then shows it as handled.
+- `get_screenshot` — the full viewport screenshot, or its path if it is too large.
+
+Send notes to the 📥 Inbox in the extension, then ask the app to read your browser notes.
 
 ### herdr plugin
 

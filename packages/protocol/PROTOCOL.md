@@ -4,7 +4,7 @@ The bridge is an HTTP server on `127.0.0.1`, port `47291` by default (`ANYNOTATE
 
 ## Handshake
 
-`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.5.1", "protocol": { "version": 2, "min": 1 } }`.
+`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.6.0", "protocol": { "version": 2, "min": 1 } }`.
 
 A client supports a range of protocol versions (the extension: `min 2, max 2`) and calls `compatibility(clientRange, response.protocol)`:
 

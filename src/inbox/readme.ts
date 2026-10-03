@@ -1,4 +1,5 @@
 import { type Annotation, type Bundle, INTENTS, type Intent } from "@anynotate/protocol";
+import { describeTarget } from "./target";
 
 const DIRECTIVES: Record<Intent, string> = {
   explain: "**Explain** this.",
@@ -42,7 +43,7 @@ function section(a: Annotation, uploaded: ReadonlySet<string>): string {
 export function renderReadme(b: Bundle, uploaded: ReadonlySet<string>): string {
   const n = b.annotations.length;
   const vp = b.annotations[0]?.viewport;
-  const target = `${b.target.agent} @ ${b.target.cwd ?? b.target.pane ?? b.target.sessionId ?? "any"}`;
+  const target = describeTarget(b.target);
   const out = [
     `# Browser notes: "${b.title}" (${b.url})`,
     `Sent ${b.sentAt} · ${n} note${n === 1 ? "" : "s"}${vp ? ` · viewport ${vp.w}×${vp.h}` : ""} · target: ${target}`,

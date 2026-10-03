@@ -20,6 +20,11 @@ test("list shows id, status, target and title, newest first", () => {
   expect(out).toContain(`${a.id}  delivered(herdr)  claude  "older"`);
 });
 
+test("an inbox-only bundle is listed as the inbox, not under its placeholder agent", () => {
+  const b = writeBundle({ ...sampleInput, title: "kept", target: { agent: "claude" } }, {});
+  expect(runAnnotations([])).toContain(`${b.id}  queued  inbox  "kept"`);
+});
+
 test("latest prints README and marks pull", () => {
   const b = writeBundle(sampleInput, {});
   const out = runAnnotations(["latest"]);
