@@ -11,6 +11,10 @@ export type Intent = (typeof INTENTS)[number];
 
 const Box = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
 
+/** A rectangle the user drew, in CSS px relative to the viewport at capture time (add `viewport.scrollY` for page y). */
+export const Region = z.object({ x: z.number(), y: z.number(), w: z.number().nonnegative(), h: z.number().nonnegative() });
+export type Region = z.infer<typeof Region>;
+
 export const Annotation = z.object({
   id: z.string().regex(/^A\d+$/),
   // v1 kinds only; "region" | "draw" are reserved for later tools.
@@ -24,6 +28,8 @@ export const Annotation = z.object({
     path: z.array(z.string()),
     near: z.string(),
     hosts: z.array(z.string()).optional(),
+    /** CSS selectors of the iframes holding the note, outermost first, each resolved in the previous frame's document; absent for the top document. `css`, `hosts` and `path` are then inside the innermost frame, while `box` and `region` stay in the top page's viewport. */
+    frames: z.array(z.string()).optional(),
   }),
   element: z.object({
     tag: z.string(),
@@ -36,7 +42,10 @@ export const Annotation = z.object({
   box: Box,
   viewport: z.object({ w: z.number(), h: z.number(), dpr: z.number(), scrollY: z.number() }),
   crop: z.string().regex(/^crops\/A\d+\.png$/),
-});
+  region: Region.optional(),
+  /** True when the note's target was not on screen at send time (scrolled out of a virtual list, another tab); `box` and the crop are from when it was last seen. */
+  offscreen: z.boolean().optional(),
+}).refine((a) => !a.region || a.kind === "element", { message: "region is only allowed on element annotations", path: ["region"] });
 export type Annotation = z.infer<typeof Annotation>;
 
 export const Target = z.object({

@@ -76,3 +76,35 @@ test("new intents get a directive line under the heading; legacy and missing int
   expect(md.match(/^\*\*(Explain|Change requested\.|Approved)\*\*/gm)).toHaveLength(3);
   expect(md).toContain("Comment: is there a substitute for cream?");
 });
+
+test("a region note renders like an element note plus a region line pointing at its crop", () => {
+  const a = sampleInput.annotations[0]!;
+  const region = {
+    ...a, id: "A3", kind: "element", comment: "move this shape left", intent: "change",
+    anchor: { ...a.anchor, quote: undefined, css: "canvas#board", near: "Board" },
+    element: { tag: "canvas", text: "", html: '<canvas id="board"></canvas>', attrs: { id: "board" } },
+    region: { x: 310.4, y: 95.6, w: 420, h: 180 },
+    crop: "crops/A3.png",
+  };
+  const b = Bundle.parse({ ...bundle, annotations: [bundle.annotations[0], region] });
+  const md = renderReadme(b, new Set([...uploaded, "crops/A3.png"]));
+  expect(md).toContain('## A3 · element · under "Board" · <canvas>\n**Change requested.**\nRegion: 420×180 at (310, 96) on <canvas#board> · see crops/A3.png\nComment: move this shape left');
+  expect(md.match(/^Region:/gm)).toHaveLength(1);
+  expect(renderReadme(b, uploaded)).toContain("Region: 420×180 at (310, 96) on <canvas#board>\n");
+});
+
+test("an off-screen note says so in its heading, others do not", () => {
+  const a = sampleInput.annotations[0]!;
+  const b = Bundle.parse({ ...bundle, annotations: [bundle.annotations[0], { ...a, id: "A2", offscreen: true }] });
+  const md = renderReadme(b, uploaded);
+  expect(md).toContain('## A2 · text · question · under "Ingredients" (off-screen when sent)\n');
+  expect(md.match(/off-screen when sent/g)).toHaveLength(1);
+});
+
+test("a note inside an iframe names the frames after its selector", () => {
+  const a = sampleInput.annotations[0]!;
+  const b = Bundle.parse({ ...bundle, annotations: [bundle.annotations[0], { ...a, id: "A2", crop: "crops/A2.png", anchor: { ...a.anchor, css: "p#inner", frames: ["iframe#card", "iframe.nested"] } }] });
+  const md = renderReadme(b, uploaded);
+  expect(md).toContain("Crop: crops/A2.png · selector: `p#inner` inside iframe `iframe#card` › `iframe.nested`\n");
+  expect(md.match(/inside iframe/g)).toHaveLength(1);
+});

@@ -67,3 +67,58 @@ test("intent accepts explain, change, approve and the legacy values, and may be 
   delete none.annotations[0].intent;
   expect(BundleInput.parse(none).annotations[0]!.intent).toBeUndefined();
 });
+
+const regionNote = () => {
+  const x = structuredClone(sampleInput) as any;
+  Object.assign(x.annotations[0], {
+    kind: "element",
+    anchor: { ...x.annotations[0].anchor, quote: undefined },
+    element: { tag: "canvas", text: "", html: '<canvas id="board"></canvas>', attrs: { id: "board" } },
+    region: { x: 310, y: 96, w: 420, h: 180 },
+  });
+  return x;
+};
+
+test("an element annotation may carry a region, and bundles without one still parse", () => {
+  expect(BundleInput.parse(regionNote()).annotations[0]!.region).toEqual({ x: 310, y: 96, w: 420, h: 180 });
+  expect(BundleInput.parse(sampleInput).annotations[0]!.region).toBeUndefined();
+});
+
+test("region is rejected on text annotations and with a negative size", () => {
+  const onText = structuredClone(sampleInput) as any;
+  onText.annotations[0].region = { x: 0, y: 0, w: 10, h: 10 };
+  expect(BundleInput.safeParse(onText).success).toBe(false);
+  const negative = regionNote();
+  negative.annotations[0].region.w = -1;
+  expect(BundleInput.safeParse(negative).success).toBe(false);
+  const partial = regionNote();
+  delete partial.annotations[0].region.h;
+  expect(BundleInput.safeParse(partial).success).toBe(false);
+});
+
+test("unknown fields on an annotation and its region are stripped", () => {
+  const x = regionNote();
+  x.annotations[0].future = "ignored";
+  x.annotations[0].region.rotation = 45;
+  const a = BundleInput.parse(x).annotations[0] as any;
+  expect(a.future).toBeUndefined();
+  expect(a.region).toEqual({ x: 310, y: 96, w: 420, h: 180 });
+});
+
+test("offscreen is an optional boolean on any annotation", () => {
+  const x = structuredClone(sampleInput) as any;
+  x.annotations[0].offscreen = true;
+  expect(BundleInput.parse(x).annotations[0]!.offscreen).toBe(true);
+  expect(BundleInput.parse(sampleInput).annotations[0]!.offscreen).toBeUndefined();
+  x.annotations[0].offscreen = "yes";
+  expect(BundleInput.safeParse(x).success).toBe(false);
+});
+
+test("frames is an optional list of iframe selectors on the anchor", () => {
+  const x = structuredClone(sampleInput) as any;
+  x.annotations[0].anchor.frames = ["iframe#card", "iframe.inner"];
+  expect(BundleInput.parse(x).annotations[0]!.anchor.frames).toEqual(["iframe#card", "iframe.inner"]);
+  expect(BundleInput.parse(sampleInput).annotations[0]!.anchor.frames).toBeUndefined();
+  x.annotations[0].anchor.frames = "iframe#card";
+  expect(BundleInput.safeParse(x).success).toBe(false);
+});

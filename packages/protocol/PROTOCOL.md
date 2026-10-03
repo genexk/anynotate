@@ -4,7 +4,7 @@ The bridge is an HTTP server on `127.0.0.1`, port `47291` by default (`ANYNOTATE
 
 ## Handshake
 
-`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.3.0", "protocol": { "version": 2, "min": 1 } }`.
+`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.5.1", "protocol": { "version": 2, "min": 1 } }`.
 
 A client supports a range of protocol versions (the extension: `min 2, max 2`) and calls `compatibility(clientRange, response.protocol)`:
 
@@ -78,6 +78,28 @@ Each annotation may carry an `intent` telling the agent what the user wants. `IN
 
 The v1 values `question`, `bug` and `note` are still accepted and appear in the heading as before, with no directive line. `change` was also a v1 value; it keeps its name and now gets the directive line. No `intent` means no directive either.
 
+### Region notes
+
+On pages that draw into a `<canvas>` (online documents, design tools, maps), there is no text or element under the user's pointer worth selecting, so the user draws a rectangle instead. Such a note is an `element` annotation whose `element` is the node under the rectangle (usually the `<canvas>`) and which carries an optional `region`:
+
+```ts
+region?: { x: number; y: number; w: number; h: number }
+```
+
+The rectangle is in CSS pixels, relative to the viewport at capture time; add `viewport.scrollY` for the page offset. `w` and `h` are non-negative. `box` still describes the whole element, and `crops/A<n>.png` shows just the rectangle. `README.md` adds a line under the note's heading, such as `Region: 420×180 at (310, 96) on <canvas#board> · see crops/A3.png`.
+
+`region` is only valid on `kind: "element"`; a `text` annotation with a `region` is rejected. It is an additive field: a bridge that predates it parses the annotation as a plain element note and drops `region`, so the agent still gets the comment, element and crop.
+
+### Notes inside frames
+
+A note made on text or an element inside a same-origin `<iframe>` carries the frames on its anchor:
+
+```ts
+anchor.frames?: string[]
+```
+
+Each entry is a CSS selector for an `<iframe>`, outermost first, resolved in the document of the frame before it (the first in the top page). `css`, `hosts`, `path` and `quote` then refer to the innermost frame's document, while `box` and `region` stay in the top page's viewport. `README.md` names the frames after the note's selector, such as ``selector: `p#inner` inside iframe `iframe#card` ``. It is additive: a bridge that predates it drops `frames`, and the agent gets a selector without the frame it lives in.
+
 ## Evolution
 
 - Additive changes — optional fields, new endpoints — keep `PROTOCOL_VERSION`. Both sides ignore fields they don't know.
@@ -88,6 +110,9 @@ The v1 values `question`, `bug` and `note` are still accepted and appear in the 
 
 - **v1** — handshake, token-only access, native-host token delivery.
 - **v2** — intents `explain`, `change`, `approve` (legacy `question`, `bug`, `note` still accepted). `PROTOCOL_MIN` stays `1`: a v2 bridge accepts v1 clients.
+  - Optional `region` on element annotations (additive, `@anynotate/protocol` 0.4.0, bridge 0.5.1).
+  - Optional `offscreen: true` on any annotation whose target was not on screen at send time (`box` and crop are from when it was last seen); `README.md` adds `(off-screen when sent)` to its heading (additive, same releases).
+  - Optional `anchor.frames` on notes made inside same-origin iframes; `README.md` names the frames after the selector (additive, same releases).
 
 ## Threat model
 

@@ -16,14 +16,26 @@ function where(a: Annotation): string {
   return parts.join(" · ");
 }
 
+function regionLine(a: Annotation, uploaded: ReadonlySet<string>): string | undefined {
+  const r = a.region;
+  if (!r) return undefined;
+  const n = Math.round;
+  const on = a.element ? ` on <${a.element.tag}${a.element.attrs.id ? `#${a.element.attrs.id}` : ""}>` : "";
+  const crop = uploaded.has(a.crop) ? ` · see ${a.crop}` : "";
+  return `Region: ${n(r.w)}×${n(r.h)} at (${n(r.x)}, ${n(r.y)})${on}${crop}`;
+}
+
 function section(a: Annotation, uploaded: ReadonlySet<string>): string {
   const directive = a.intent && (INTENTS as readonly string[]).includes(a.intent) ? DIRECTIVES[a.intent as Intent] : undefined;
-  const head = [a.id, a.kind, directive ? undefined : a.intent, where(a)].filter(Boolean).join(" · ");
+  const head = [a.id, a.kind, directive ? undefined : a.intent, where(a)].filter(Boolean).join(" · ") + (a.offscreen ? " (off-screen when sent)" : "");
   const lines = [`## ${head}`];
   if (directive) lines.push(directive);
   if (a.anchor.quote) lines.push(`> quote: "${a.anchor.quote.exact}"`);
+  const region = regionLine(a, uploaded);
+  if (region) lines.push(region);
   lines.push(`Comment: ${a.comment || "(no comment)"}`);
-  lines.push(`Crop: ${uploaded.has(a.crop) ? a.crop : "(none)"} · selector: \`${a.anchor.css}\``);
+  const frames = a.anchor.frames?.length ? ` inside iframe ${a.anchor.frames.map((f) => `\`${f}\``).join(" › ")}` : "";
+  lines.push(`Crop: ${uploaded.has(a.crop) ? a.crop : "(none)"} · selector: \`${a.anchor.css}\`${frames}`);
   return lines.join("\n");
 }
 

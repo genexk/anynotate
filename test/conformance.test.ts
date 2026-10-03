@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { conformance, EXAMPLE_BUNDLE_ID, type Exchange, FIXTURE_EXTENSION_ORIGIN, responseSchemas } from "@anynotate/protocol/fixtures";
+import type { BundleInput } from "@anynotate/protocol";
+import { conformance, EXAMPLE_BUNDLE_ID, exampleBundleInput, type Exchange, FIXTURE_EXTENSION_ORIGIN, responseSchemas } from "@anynotate/protocol/fixtures";
 import { createBridge } from "../src/bridge/server";
 
 let home: string;
@@ -67,5 +68,8 @@ test("the bridge answers every conformance exchange as @anynotate/protocol descr
     const parsed = responseSchemas[x.response.schema].safeParse(res.body);
     expect({ name: x.name, ok: parsed.success }).toEqual({ name: x.name, ok: true });
     if (x.name === "send-bundle") id = (res.body as { id: string }).id;
+    if (x.name === "bundle-status-extension") {
+      expect((res.body as { bundle: BundleInput }).bundle.annotations.map((a) => a.region)).toEqual(exampleBundleInput.annotations.map((a) => a.region));
+    }
   }
 });

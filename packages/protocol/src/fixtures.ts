@@ -24,6 +24,14 @@ export const exampleBundleInput: BundleInput = {
     box: { x: 10, y: 20, w: 100, h: 18 },
     viewport: { w: 1280, h: 800, dpr: 2, scrollY: 0 },
     crop: "crops/A1.png",
+  }, {
+    id: "A2", kind: "element", comment: "make this bowl bigger", intent: "change",
+    anchor: { css: "canvas#plating", path: ["main", "figure"], near: "Serving" },
+    element: { tag: "canvas", text: "", html: '<canvas id="plating" width="800" height="600"></canvas>', attrs: { id: "plating" } },
+    box: { x: 40, y: 300, w: 800, h: 600 },
+    viewport: { w: 1280, h: 800, dpr: 2, scrollY: 0 },
+    crop: "crops/A2.png",
+    region: { x: 310, y: 420, w: 220, h: 140 },
   }],
 };
 export const examplePage = "# Tomato soup\n\nstir in ⟦A1⟧200 ml cream before serving\n";
@@ -49,7 +57,7 @@ export type Exchange = {
   response: { schema: SchemaName; example: unknown };
 };
 
-const health = { ok: true, bridgeVersion: "0.3.0", protocol: { version: 2, min: 1 } };
+const health = { ok: true, bridgeVersion: "0.5.1", protocol: { version: 2, min: 1 } };
 const queued = { state: "queued", at: "2026-09-24T15:32:01.000Z" };
 const exampleBundle = { ...exampleBundleInput, id: EXAMPLE_BUNDLE_ID, files: { page: "page.md", screenshot: "screenshot.png" } };
 
