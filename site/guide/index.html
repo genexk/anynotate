@@ -40,6 +40,7 @@
         <li><a href="#install">Install</a></li>
         <li><a href="#first-note">Make your first note</a></li>
         <li><a href="#pick">Pick elements</a></li>
+        <li><a href="#region">Mark a region</a></li>
         <li><a href="#intent">Tag intent</a></li>
         <li><a href="#edit">Edit and delete</a></li>
         <li><a href="#send">Send to an agent</a></li>
@@ -105,8 +106,39 @@
       </figure>
     </section>
 
+    <section class="guide-section" id="region" aria-labelledby="region-title">
+      <h2 id="region-title"><span class="n" aria-hidden="true">4</span>Mark a region</h2>
+      <p>For something that is not its own element, such as part of a chart, a canvas, a corner of an image or a patch of blank space, draw a box around it.</p>
+      <ol class="howto">
+        <li>Turn on the picker: click the crosshair in the panel, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> (<kbd class="sym">⌥</kbd><kbd class="sym">⇧</kbd><kbd>E</kbd> on a Mac).</li>
+        <li>Press and drag over the area. A dashed box follows the pointer; <kbd>Esc</kbd> cancels it. A plain click still picks the whole element.</li>
+        <li>Let go and write your note.</li>
+      </ol>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/11-region-draw.png"><img src="../img/guide/11-region-draw.png" width="1280" height="800" loading="lazy" alt="The crosshair in the panel is pressed and a dashed blue box is being dragged over the red tomato in the recipe's picture."></a>
+        <figcaption>Drag in the picker to draw a box.</figcaption>
+      </figure>
+      <div class="split">
+        <figure class="shot small">
+          <a class="zoom" href="../img/guide/12-region-dock.png"><img src="../img/guide/12-region-dock.png" width="360" height="307" loading="lazy" alt="The panel with one note: Region 200×100 on &lt;div&gt;, Make this tomato a deeper red."></a>
+          <figcaption>The note's row names the region.</figcaption>
+        </figure>
+        <div>
+          <p>The note belongs to the element under the box, and the box stays on the page with its number. Your agent's README gets a line such as <code>Region: 200×100 at (360, 246) on &lt;div#hero&gt; · see crops/A1.png</code>, and the note's crop is just the box.</p>
+          <p class="tip">Pages that draw their content on a canvas, like charts and maps, have no text to select. Click one and the panel suggests dragging a region.</p>
+        </div>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="../img/guide/12-region-note-light.png"><picture>
+          <source srcset="../img/guide/12-region-note-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="../img/guide/12-region-note-light.png" width="1280" height="800" loading="lazy" alt="The recipe page with a numbered box around the red tomato in its picture, and the panel listing the note Region 200×100 on &lt;div&gt;: Make this tomato a deeper red.">
+        </picture></a>
+        <figcaption>A saved region note: numbered on the page and in the panel.</figcaption>
+      </figure>
+    </section>
+
     <section class="guide-section" id="intent" aria-labelledby="intent-title">
-      <h2 id="intent-title"><span class="n" aria-hidden="true">4</span>Tag intent</h2>
+      <h2 id="intent-title"><span class="n" aria-hidden="true">5</span>Tag intent</h2>
       <p>Three icons under the note say what kind of answer you want. Tagging is optional; click a pressed icon again to clear it.</p>
       <div class="split">
         <figure class="shot small">
@@ -122,7 +154,7 @@
     </section>
 
     <section class="guide-section" id="edit" aria-labelledby="edit-title">
-      <h2 id="edit-title"><span class="n" aria-hidden="true">5</span>Edit and delete</h2>
+      <h2 id="edit-title"><span class="n" aria-hidden="true">6</span>Edit and delete</h2>
       <p>Every note gets a number on the page and a row in the panel, and stays there until you send it, even if you close the tab.</p>
       <ol class="howto">
         <li>To change a note, click its highlight on the page or the pencil in its row. The note box opens with your text.</li>
@@ -143,7 +175,7 @@
     </section>
 
     <section class="guide-section" id="send" aria-labelledby="send-title">
-      <h2 id="send-title"><span class="n" aria-hidden="true">6</span>Send to an agent</h2>
+      <h2 id="send-title"><span class="n" aria-hidden="true">7</span>Send to an agent</h2>
       <ol class="howto">
         <li>Choose where the notes go in the session picker at the bottom of the panel. The ↻ button refreshes the list.</li>
         <li>Press <strong>Send</strong> (or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> to send to the last place you used). The panel shows a spinner while it captures the page and hands it to the bridge.</li>
@@ -177,7 +209,7 @@
     </section>
 
     <section class="guide-section" id="agent" aria-labelledby="agent-title">
-      <h2 id="agent-title"><span class="n" aria-hidden="true">7</span>What the agent sees</h2>
+      <h2 id="agent-title"><span class="n" aria-hidden="true">8</span>What the agent sees</h2>
       <p>Each send becomes a folder in <code>~/.anynotate/inbox/</code>. The agent is pointed at its <code>README.md</code>: your notes in order, with the quoted text or element, your intent and comment. Next to it are the page as text, a screenshot with the numbered markers, and a crop for each note.</p>
       <figure class="shot term">
         <a class="zoom" href="../img/guide/agent-receives.png"><img src="../img/guide/agent-receives.png" width="1272" height="581" loading="lazy" alt="Illustration of an agent session in a terminal: the prompt 'Browser notes waiting: read ~/.anynotate/inbox/…/README.md and act on them.' followed by the agent's reply working through the three notes and marking the bundle as read."></a>
@@ -190,7 +222,7 @@
     </section>
 
     <section class="guide-section" id="inbox" aria-labelledby="inbox-title">
-      <h2 id="inbox-title"><span class="n" aria-hidden="true">8</span>Use the herdr inbox</h2>
+      <h2 id="inbox-title"><span class="n" aria-hidden="true">9</span>Use the herdr inbox</h2>
       <p>The inbox lists everything you have sent, newest first, with where it went and whether the agent has read it. Open it with <code>anynotate inbox</code> in any terminal, or as a popup in herdr with the plugin (bind it to a key such as <span class="nowrap"><kbd>prefix</kbd> <kbd>i</kbd></span>; see the <a href="https://github.com/genexk/anynotate/blob/main/integrations/herdr/README.md">plugin's key bindings</a>).</p>
       <figure class="shot term">
         <a class="zoom" href="../img/guide/inbox-list.png"><img src="../img/guide/inbox-list.png" width="1272" height="521" loading="lazy" alt="The Anynotate inbox in a terminal: five bundles with status queued, delivered or read, their age, note count, target such as claude · w1:p2, and the page title."></a>
@@ -226,7 +258,7 @@
     </section>
 
     <section class="guide-section" id="settings" aria-labelledby="settings-title">
-      <h2 id="settings-title"><span class="n" aria-hidden="true">9</span>Settings and storage</h2>
+      <h2 id="settings-title"><span class="n" aria-hidden="true">10</span>Settings and storage</h2>
       <p>Open the extension's options from its menu (right-click the Anynotate icon, then <strong>Options</strong>).</p>
       <ul class="howto plain">
         <li><strong>Bridge</strong> shows whether the bridge answers, how many sessions it sees, and the extension and bridge versions.</li>
@@ -241,7 +273,7 @@
     </section>
 
     <section class="guide-section" id="trouble" aria-labelledby="trouble-title">
-      <h2 id="trouble-title"><span class="n" aria-hidden="true">10</span>Troubleshooting</h2>
+      <h2 id="trouble-title"><span class="n" aria-hidden="true">11</span>Troubleshooting</h2>
       <p>One command checks the install, the bridge, the Chrome helper and the agent hooks, and tells you what to fix:</p>
       <div class="cmd">
         <pre><code id="cmd-doctor">anynotate doctor</code></pre>

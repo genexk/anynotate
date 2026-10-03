@@ -119,7 +119,7 @@ describe("site/guide", () => {
   });
 
   test("has the sections the home page promises", () => {
-    for (const id of ["install", "first-note", "pick", "intent", "edit", "send", "agent", "inbox", "settings", "trouble"]) {
+    for (const id of ["install", "first-note", "pick", "region", "intent", "edit", "send", "agent", "inbox", "settings", "trouble"]) {
       expect(html).toContain(`id="${id}"`);
       expect(html).toContain(`href="#${id}"`);
     }
