@@ -65,7 +65,7 @@
           <li>a screenshot of the visible part of the page, and cropped images of the parts you annotated;</li>
           <li>which agent session the notes are for.</li>
         </ul>
-        <p>Before a screenshot is taken, Anynotate covers password fields and payment-card fields on the page, and it blanks their values in the HTML it copies. This only works for fields in the page itself: fields inside embedded frames (such as a payment form loaded from another site) or inside shadow DOM components are not covered, so avoid annotating pages while such fields show sensitive values. Anynotate does nothing on a page until you turn it on there.</p>
+        <p>Before a screenshot is taken, Anynotate covers password, one-time-code and payment-card fields (including text fields named for a password, code or card), and it blanks their values in the text and HTML it copies. This covers the page and its same-origin frames, and card forms embedded from known payment providers (Stripe, Braintree, Adyen, PayPal, Square, Checkout.com, Authorize.net, Klarna, Shopify, Recurly, Chargebee, Paddle, Mollie, Razorpay, Spreedly, VGS, Cybersource). It is best-effort: fields a page doesn't mark, fields inside shadow DOM components and fields in other embedded frames are not covered, so check what's on screen before you send. Anynotate does nothing on a page until you turn it on there.</p>
       </section>
 
       <section class="card" id="where" aria-labelledby="where-title">
