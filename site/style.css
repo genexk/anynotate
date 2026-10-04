@@ -425,7 +425,11 @@ kbd.sym { font-family: var(--sans); font-size: 0.95em; }
   border-radius: 20px;
   box-shadow: 0 0 0 1px var(--line-strong), 0 20px 50px -12px rgb(0 0 0 / 70%);
 }
-.hero h1 { max-width: 16ch; margin-inline: auto; text-wrap: balance; }
+.hero h1 { max-width: 18ch; margin-inline: auto; text-wrap: balance; }
+.hero h1 .punch { display: block; margin-top: 0.12em; background: linear-gradient(90deg, #fff 0%, #cdd9ff 55%, #9fb6ff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero h1 .punch .hl { -webkit-text-fill-color: var(--mark); }
+.hl.hl-2::before { content: "2"; -webkit-text-fill-color: #fff; }
+.hero h1 .punch .hl { padding-right: 0; }
 .hero .lead { max-width: 40rem; margin: 0 auto 2rem; color: #ddd6e8; }
 
 .hl {
