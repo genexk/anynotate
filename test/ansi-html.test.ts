@@ -17,3 +17,11 @@ test("a rendered inbox converts with no escape codes left", () => {
   expect(lines.join("\n")).not.toContain("\x1b");
   expect(lines[0]).toContain('<span class="b">Anynotate inbox');
 });
+
+test("reverse video and background stripes become classes, including truecolor and 256-colour forms", () => {
+  expect(ansiToHtml("\x1b[1;7m› sel\x1b[0m")).toBe('<span class="b rv">› sel</span>');
+  expect(ansiToHtml("\x1b[48;2;28;32;40mrow \x1b[33mq\x1b[39m x\x1b[0m")).toBe(
+    '<span class="bg-stripe">row </span><span class="fg-yellow bg-stripe">q</span><span class="bg-stripe"> x</span>',
+  );
+  expect(ansiToHtml("\x1b[48;5;235mrow\x1b[49m")).toBe('<span class="bg-stripe">row</span>');
+});

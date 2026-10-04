@@ -5,13 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anynotate: annotate anything in your browser for your AI agent</title>
 <meta name="description" content="Annotate anything in your browser and send it to your AI chat sessions: Claude Code, Codex, and any agent in a herdr pane.">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#513c5e">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d0b17">
 <link rel="icon" type="image/png" href="img/icon.png">
 <link rel="apple-touch-icon" href="img/icon.png">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
+<script src="aurora.js?v=5" defer></script>
 </head>
 <body>
+<canvas class="aurora" aria-hidden="true"></canvas>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
   <div class="wrap">
@@ -49,6 +51,7 @@
       <ul class="agents" aria-label="Works with">
         <li>Claude Code</li>
         <li>Codex</li>
+        <li>Claude Desktop, Cursor and the Codex app over MCP</li>
         <li>Any agent in a herdr pane: Claude, Codex, Antigravity and more</li>
       </ul>
       <div class="frame">
@@ -172,7 +175,7 @@
         <li class="step">
           <span class="step-num" aria-hidden="true">2</span>
           <h3>Annotate</h3>
-          <p>Highlight text, or pick an element with the crosshair or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. Write a note.</p>
+          <p>Highlight text, or pick an element or drag a region with the crosshair or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. Write a note.</p>
           <p class="muted">Optionally tag it: explain, change or approve.</p>
         </li>
         <li class="step">
@@ -214,11 +217,11 @@
       <ul class="features">
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg></span>
-          <div><h3>Numbered highlights</h3><p>Every note is numbered on the page and stays there until you send it.</p></div>
+          <div><h3>Numbered highlights</h3><p>Every note is numbered on the page until you send it, readable on light and dark pages.</p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/></svg></span>
-          <div><h3>Element picker</h3><p>Point at a button, image or block; your agent gets its HTML.</p></div>
+          <div><h3>Pick or select by keyboard</h3><p>Point at an element with <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> for its HTML, or select text with <kbd>Shift</kbd> and the arrow keys.</p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M11 3h2M11 21h2M3 11v2M21 11v2"/></svg></span>
@@ -234,15 +237,19 @@
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></span>
-          <div><h3>Send anywhere</h3><p>To Claude Code, Codex, a herdr pane, an inbox any agent can read, or Claude Desktop and Cursor over MCP.</p></div>
+          <div><h3>Send anywhere</h3><p>One list of herdr panes and Claude Code or Codex sessions, plus one 📥 Inbox any agent or MCP app reads.</p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span>
-          <div><h3>Nothing lost</h3><p>Unsent notes stay in your browser; fix or remove any of them before you send.</p></div>
+          <div><h3>Nothing lost</h3><p>Unsent notes stay in your browser; a note whose text left the page is still sent, with its crop.</p></div>
         </li>
         <li class="feature">
-          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></span>
-          <div><h3>Light and dark pages</h3><p>Highlights and the panel stay readable on any page.</p></div>
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg></span>
+          <div><h3>Live pages</h3><p>Notes stay put through ticking values, re-rendered lists and hash routes; <strong>Scroll to</strong> finds one off screen.</p></div>
+        </li>
+        <li class="feature">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="8" y="8" width="10" height="10" rx="1"/></svg></span>
+          <div><h3>Frames and embeds</h3><p>Annotate inside frames, including other sites' after one <strong>Allow</strong>, such as AI chat artifacts.</p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
@@ -250,11 +257,7 @@
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
-          <div><h3>macOS, Linux, Windows</h3><p>One-line installers and a background service on all three.</p></div>
-        </li>
-        <li class="feature">
-          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></svg></span>
-          <div><h3>Chromium browsers</h3><p>The helper is set up for Chrome, Edge, Brave and Chromium.</p></div>
+          <div><h3>Every desktop</h3><p>Installers and a background service on macOS, Linux and Windows; Chrome, Edge, Brave and Chromium.</p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></span>
@@ -273,6 +276,8 @@
           <ul>
             <li>The extension sends nothing off your computer.</li>
             <li>Your notes go only to the local bridge and the agent you choose.</li>
+            <li>Password, card and one-time-code fields are covered in screenshots and blanked in captured text.</li>
+            <li>The panel is hidden from the page's own scripts.</li>
             <li>No accounts, no analytics, no tracking.</li>
           </ul>
           <p class="muted">Your agent may pass what it reads to its own model provider, as it does with anything you give it. <a href="privacy/">Read the privacy policy</a></p>

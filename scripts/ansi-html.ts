@@ -3,17 +3,24 @@ export const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => ESCAP
 
 const FG: Record<number, string> = { 30: "black", 31: "red", 32: "green", 33: "yellow", 34: "blue", 35: "magenta", 36: "cyan", 37: "white" };
 
-type Style = { bold: boolean; dim: boolean; fg?: string };
+type Style = { bold: boolean; dim: boolean; reverse?: boolean; fg?: string; bg?: string };
 
 function classes(s: Style): string[] {
-  return [s.bold ? "b" : "", s.dim ? "d" : "", s.fg ? `fg-${s.fg}` : ""].filter(Boolean);
+  return [s.bold ? "b" : "", s.dim ? "d" : "", s.reverse ? "rv" : "", s.fg ? `fg-${s.fg}` : "", s.bg ? `bg-${s.bg}` : ""].filter(Boolean);
 }
 
 function apply(s: Style, params: string): Style {
   const codes = params === "" ? [0] : params.split(";").map(Number);
   let next = { ...s };
-  for (const c of codes) {
+  for (let i = 0; i < codes.length; i++) {
+    const c = codes[i]!;
     if (c === 0) next = { bold: false, dim: false };
+    else if (c === 7) next.reverse = true;
+    else if (c === 27) next.reverse = false;
+    else if (c === 48) {
+      next.bg = "stripe";
+      i += codes[i + 1] === 2 ? 4 : 2;
+    } else if (c === 49) next.bg = undefined;
     else if (c === 1) next.bold = true;
     else if (c === 2) next.dim = true;
     else if (c === 22) next = { ...next, bold: false, dim: false };

@@ -1,10 +1,12 @@
 import { BUNDLE_ID } from "@anynotate/protocol";
-import { type PaneList, readPanes } from "../bridge/herdr";
+import { type PaneList, readNamedPanes } from "../bridge/herdr";
 import { latestBundleId } from "../inbox/store";
 import { runDeliver } from "./deliver";
 import { type DeleteResult, deleteBundle, loadRows, readReadme } from "./inbox-data";
 import {
+  colorDepth,
   type Effect,
+  lightBackground,
   fit,
   formatAge,
   handleKey,
@@ -43,7 +45,7 @@ async function deliverThroughCli(id: string, pane: string): Promise<{ ok: boolea
 export const defaultDeps = (): InboxDeps => ({
   loadRows,
   readReadme,
-  listPanes: () => readPanes(),
+  listPanes: () => readNamedPanes(),
   deliver: deliverThroughCli,
   remove: deleteBundle,
 });
@@ -184,7 +186,8 @@ export const ESC_WAIT_MS = 50;
 
 function runTty(io: InboxIO, deps: InboxDeps, now: () => number, selection?: { id: string; archived: boolean }, notice?: string): Promise<number> {
   const { stdin, stdout } = io;
-  const color = !(io.env.NO_COLOR ?? "");
+  const depth = colorDepth(io.env, process.platform);
+  const color = depth !== "none";
   let state: InboxState = { ...initialState([], selection?.archived ?? false), message: notice };
   let pending = "";
   let escTimer: ReturnType<typeof setTimeout> | undefined;
@@ -194,7 +197,7 @@ function runTty(io: InboxIO, deps: InboxDeps, now: () => number, selection?: { i
   return new Promise<number>((resolve) => {
     const draw = () => {
       if (restored) return;
-      const lines = renderInbox(state, { now: now(), color });
+      const lines = renderInbox(state, { now: now(), color, depth, light: lightBackground(io.env) });
       stdout.write(`\x1b[H${lines.map((l) => `\x1b[2K${l}`).join("\r\n")}`);
     };
     const restore = () => {

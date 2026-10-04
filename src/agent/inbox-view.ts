@@ -30,7 +30,45 @@ export type InboxState = {
   height: number;
 };
 
-export type RenderOptions = { now: number; color: boolean };
+export type ColorDepth = "none" | "16" | "256" | "truecolor";
+
+export type RenderOptions = { now: number; color: boolean; depth?: ColorDepth; light?: boolean };
+
+const TRUECOLOR_PROGRAMS = new Set(["iTerm.app", "WezTerm", "ghostty", "vscode"]);
+
+export function colorDepth(env: Record<string, string | undefined>, platform: string = process.platform): ColorDepth {
+  if (env.NO_COLOR) return "none";
+  const term = env.TERM ?? "";
+  if (term === "dumb") return "none";
+  if (/^(truecolor|24bit)$/i.test(env.COLORTERM ?? "") || /-direct$|truecolor/.test(term)) return "truecolor";
+  if (env.WT_SESSION || TRUECOLOR_PROGRAMS.has(env.TERM_PROGRAM ?? "")) return "truecolor";
+  if (/256col/.test(term) || env.TERM_PROGRAM === "Apple_Terminal" || platform === "win32") return "256";
+  return "16";
+}
+
+export function lightBackground(env: Record<string, string | undefined>): boolean {
+  const bg = Number((env.COLORFGBG ?? "").split(";").at(-1));
+  return bg === 7 || (bg >= 9 && bg <= 15);
+}
+
+const STRIPE: Partial<Record<ColorDepth, { dark: string; light: string }>> = {
+  truecolor: { dark: "48;2;28;32;40", light: "48;2;238;240;244" },
+  "256": { dark: "48;5;235", light: "48;5;254" },
+};
+
+const stripeCode = (o: RenderOptions) => (o.color && o.depth ? STRIPE[o.depth]?.[o.light ? "light" : "dark"] : undefined);
+
+const SELECTED = "1;7";
+
+function styleRow(line: string, index: number, selected: boolean, o: RenderOptions): string {
+  if (!o.color) return line;
+  if (selected) return `\x1b[${SELECTED}m${line}\x1b[0m`;
+  const stripe = index % 2 === 1 ? stripeCode(o) : undefined;
+  return stripe ? `\x1b[${stripe}m${line}\x1b[0m` : line;
+}
+
+const stripAnsi = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
+const padTo = (line: string, width: number) => line + " ".repeat(Math.max(0, width - textWidth(stripAnsi(line))));
 
 export const initialState = (rows: InboxRow[], archive = false): InboxState => ({
   rows,
@@ -124,7 +162,13 @@ export const statusLabel = (state: RowState) => (state === "acked" ? "read ✓" 
 const STATUS_COLOR: Record<RowState, string> = { queued: "33", delivered: "36", acked: "32", busy: "2" };
 
 type Paint = (code: string, text: string) => string;
-const painter = (color: boolean): Paint => (color ? (code, text) => `\x1b[${code}m${text}\x1b[0m` : (_code, text) => text);
+function sgrOff(code: string): string {
+  const first = Number(code.split(";")[0]);
+  if (first === 1 || first === 2) return "22";
+  if ((first >= 30 && first <= 37) || (first >= 90 && first <= 97)) return "39";
+  return "0";
+}
+const painter = (color: boolean): Paint => (color ? (code, text) => `\x1b[${code}m${text}\x1b[${sgrOff(code)}m` : (_code, text) => text);
 
 export const listCapacity = (s: InboxState) => Math.max(1, s.height - 4);
 
@@ -147,11 +191,13 @@ function listLines(s: InboxState, o: RenderOptions, paint: Paint): string[] {
   const top = scrollTo(s.sel, Math.min(s.top, Math.max(0, s.rows.length - cap)), cap);
   const out = [header];
   for (const [i, r] of s.rows.slice(top, top + cap).entries()) {
-    const selected = top + i === s.sel;
+    const index = top + i;
+    const selected = index === s.sel;
     const title = sanitize(r.archived ? `(archived) ${r.title}` : r.title) || r.id;
-    const status = paint(STATUS_COLOR[r.state], fit(statusLabel(r.state), 9));
+    const label = fit(statusLabel(r.state), 9);
+    const status = selected ? label : paint(STATUS_COLOR[r.state], label);
     const line = `${selected ? "›" : " "} ${status}  ${formatAge(r.sentAt, o.now).padStart(4)}  ${String(r.notes).padStart(3)}  ${fit(sanitize(r.target), targetW)}  ${truncate(title, titleW)}`;
-    out.push(selected ? paint("1", line) : line);
+    out.push(styleRow(padTo(line, w), index, selected, o));
   }
   return out;
 }
@@ -222,16 +268,23 @@ function splitHead(left: string, right: string, w: number): string {
 const selectedRow = (s: InboxState): InboxRow | undefined => s.rows[s.sel];
 const rowTitle = (s: InboxState, id: string) => sanitize(s.rows.find((r) => r.id === id)?.title || id);
 
-function pickerBody(s: InboxState, m: Extract<Mode, { kind: "picker" }>): string[] {
+export const paneLabel = (p: Pane) => sanitize(p.workspace ? `${p.workspace} · ${p.pane}` : p.pane);
+
+function pickerBody(s: InboxState, m: Extract<Mode, { kind: "picker" }>, o: RenderOptions, paint: Paint): string[] {
   const w = s.width;
   if (m.panes === null) return ["", fit("Looking for herdr agent panes…", w)];
   if (m.error !== undefined) return ["", fit(m.error, w)];
   if (!m.panes.length) return ["", fit("No herdr agent panes are open.", w)];
+  const labels = m.panes.map(paneLabel);
+  const labelW = Math.min(Math.max(4, ...labels.map(textWidth)), Math.max(8, Math.floor((w - 22) / 2)));
+  const cols = (mark: string, agent: string, status: string, label: string, where: string) =>
+    fit(`${mark} ${fit(agent, 8)}  ${fit(status, 8)}  ${fit(label, labelW)}  ${where}`, w);
   return [
     "",
+    paint("2", cols(" ", "agent", "status", "pane", "title — cwd")),
     ...m.panes.map((p, i) => {
-      const where = [p.title, p.cwd].filter(Boolean).join(" — ");
-      return truncate(sanitize(`${i === m.sel ? "›" : " "} ${fit(p.agent, 8)}  ${fit(p.status, 8)}  ${fit(p.pane, 8)}  ${where}`), w);
+      const where = sanitize([p.title, p.cwd].filter(Boolean).join(" — "));
+      return styleRow(cols(i === m.sel ? "›" : " ", sanitize(p.agent), sanitize(p.status), labels[i]!, where), i, i === m.sel, o);
     }),
   ];
 }
@@ -249,7 +302,7 @@ export function renderInbox(s: InboxState, o: RenderOptions): string[] {
   }
   if (m.kind === "help") return frame(s, paint, fit("Anynotate inbox · Keys", w), HELP_LINES.map((l) => fit(l, w)), "any key to go back", undefined);
   if (m.kind === "picker") {
-    return frame(s, paint, fit(`Send “${rowTitle(s, m.id)}” to which agent pane?`, w), pickerBody(s, m), PICKER_KEYS);
+    return frame(s, paint, fit(`Send “${rowTitle(s, m.id)}” to which agent pane?`, w), pickerBody(s, m, o, paint), PICKER_KEYS);
   }
   const count = `${s.rows.length} bundle${s.rows.length === 1 ? "" : "s"}${s.archive ? " · with archive" : ""}`;
   const body = listLines(s, o, paint);

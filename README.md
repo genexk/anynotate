@@ -6,6 +6,15 @@ Website: [genexk.github.io/anynotate](https://genexk.github.io/anynotate/) ([sup
 
 This repository holds the agent side: the local bridge, the `anynotate` CLI, the agent hooks and installer, and the [`@anynotate/protocol`](./packages/protocol) package. The Anynotate Chrome extension isn't publicly available yet; a Chrome Web Store release is planned. Until then you can send bundles by hand (see [Sending a bundle by hand](#sending-a-bundle-by-hand)) or build your own client on [`@anynotate/protocol`](./packages/protocol).
 
+## Features
+
+- **Notes:** turn on with <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>, then select text (mouse, or <kbd>Shift</kbd> and the arrow keys), pick an element (crosshair, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>, or <kbd>Alt</kbd>-click, open shadow roots included), or drag a region with the picker. Tag a note explain, change or approve; edit or delete it from the page or the panel. A crop is taken when the note is made.
+- **Live pages:** notes stay attached through ticking values (ages like `36s`, counters), re-rendered lists and hash routes. An off-screen note gets **Scroll to**; one that can't be found can be kept or marked orphaned. Off-screen and orphaned notes are sent with their crop, marked "Not on the page when sent". When a page's URL changes, the panel offers "N notes from /path match this page" with **Show here**.
+- **Frames:** same-site frames work like the page. Frames from other sites are picked whole until you press **Allow** for that site (one Allow covers every claude.ai artifact); allowed sites are removable in the extension's Options under "Frames from other sites". Payment frames are never entered.
+- **Targets:** one Sessions list of herdr panes (typed in now) and Claude Code or Codex sessions outside herdr (⏳, arrives with your next message), labelled `workspace · agent · folder · title` with the session's real title (`Claude app` as the folder for a Claude Code session in the Claude desktop app), plus one 📥 Inbox any agent reads. A hint line under the picker says how the chosen target gets the notes.
+- **Privacy:** password, payment-card and one-time-code fields are covered in screenshots and blanked in captured text, including inside allowed frames. The panel sits in a closed shadow root the page can't read. Pages the extension can't run on (browser pages, the Chrome Web Store, PDFs) say why.
+- **Browsers and platforms:** Chrome, Edge, Brave and Chromium; bridge, installers, `update`, `uninstall`, `doctor` and `status` on macOS, Linux and Windows.
+
 ## Install
 
 macOS and Linux:
@@ -82,13 +91,13 @@ anynotate status              # one-line health summary; --notify shows it as a 
 An agent needs no Anynotate-specific setup to receive notes:
 
 - In a herdr pane, any agent herdr detects is listed in the dock's Sessions list as `workspace · agent · folder · title`, and a bundle sent to it is typed into the pane as the bundle's README path.
-- Anywhere else, send to the 📥 Inbox in the dock, one target for every agent. Any agent reads it when asked: with `/annotations`, over MCP, from `~/.anynotate/inbox/latest/README.md` or with `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
+- Anywhere else, send to the 📥 Inbox in the dock, one target for every agent. Any agent reads it when asked: with `/annotations`, over MCP (`anynotate mcp`), from `~/.anynotate/inbox/latest/README.md` or with `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
 
 The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt. Those sessions share the Sessions list with herdr panes, marked ⏳; one in the Claude desktop app shows `Claude app` as its folder.
 
 ### Desktop apps (MCP)
 
-Apps without hooks or a terminal, such as Claude Desktop, the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. Set it up per app; `install` does not do this for you:
+Apps without hooks or a terminal, such as Claude Desktop (chat and Cowork), the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. Set it up per app; `install` does not do this for you:
 
 ```bash
 anynotate mcp install                                  # list the apps found and what each flag would change
@@ -109,7 +118,7 @@ The server offers four tools and one prompt (`review-browser-notes`, in Claude D
 
 - `list_notes` — recent bundles with status, page title and URL (`limit`, `status`).
 - `read_notes` — a bundle's notes as text plus the cropped screenshots as images. Text copied from the page (title, quotes, element text, page text) is fenced off and marked as untrusted data, so the app doesn't take it for instructions (`id`, default the latest; `include_crops`; `include_page_text` adds up to 20 KB of page text around the notes). Crops that would push the reply past about 900 KB are listed by path instead. Reading a queued bundle marks it delivered, so a prompt hook won't deliver it again.
-- `mark_done` — marks a bundle done with an optional one-line summary; the extension then shows it as handled.
+- `mark_done` — marks a bundle done with an optional one-line summary; the extension's panel then shows ✓ and the summary.
 - `get_screenshot` — the full viewport screenshot, or its path if it is too large.
 
 Send notes to the 📥 Inbox in the extension, then ask the app to read your browser notes.

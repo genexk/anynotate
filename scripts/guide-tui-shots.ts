@@ -92,9 +92,9 @@ const FAKES: Fake[] = [
 ];
 
 const PANES: Pane[] = [
-  { pane: "w1:p2", agent: "claude", cwd: "/home/me/recipes", title: "soup", status: "idle" },
-  { pane: "w1:p3", agent: "codex", cwd: "/home/me/shop", title: "pricing", status: "working" },
-  { pane: "w2:p1", agent: "claude", cwd: "/home/me/docs", title: "onboarding", status: "idle" },
+  { pane: "w1:p2", agent: "claude", cwd: "/home/me/recipes", title: "soup", status: "idle", workspace: "recipes" },
+  { pane: "w1:p3", agent: "codex", cwd: "/home/me/shop", title: "pricing", status: "working", workspace: "shop" },
+  { pane: "w2:p1", agent: "claude", cwd: "/home/me/docs", title: "onboarding", status: "idle", workspace: "docs" },
 ];
 
 function seed(): void {
@@ -137,6 +137,7 @@ pre { margin: 0; padding: 14px 18px 16px; color: #d7dce4; font: 14px/20px Menlo,
 .b { font-weight: 700; color: #f2f4f7; } .d { color: #7d8696; }
 .fg-yellow { color: #e5c07b; } .fg-cyan { color: #56b6c2; } .fg-green { color: #98c379; } .fg-red { color: #e06c75; } .fg-blue { color: #61afef; } .fg-magenta { color: #c678dd; }
 .cursor { background: #d7dce4; color: #0f1218; }
+.bg-stripe { background: #1c2028; } .rv { background: #d7dce4; color: #0f1218; }
 `;
 
 const page = (title: string, body: string) =>
@@ -151,7 +152,7 @@ type Chromium = {
   }>;
 };
 
-const tui = (s: InboxState) => page("Anynotate inbox", renderInbox(s, { now: NOW.getTime(), color: true }).map(ansiToHtml).join("\n"));
+const tui = (s: InboxState) => page("Anynotate inbox", renderInbox(s, { now: NOW.getTime(), color: true, depth: "truecolor" }).map(ansiToHtml).join("\n"));
 
 function agentIllustration(id: string): string {
   const c = (cls: string, t: string) => `<span class="${cls}">${escapeHtml(t)}</span>`;

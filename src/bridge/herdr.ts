@@ -77,13 +77,20 @@ function cachedWorkspaceNames(exec: Exec, bin: string, cache: WorkspaceCache): P
   return names;
 }
 
-export async function listPanes(exec: Exec = bunExec, bin = defaultBin(), cache: WorkspaceCache = sharedWorkspaceCache): Promise<Pane[]> {
+export async function readNamedPanes(exec: Exec = bunExec, bin = defaultBin(), cache: WorkspaceCache = sharedWorkspaceCache): Promise<PaneList> {
   const [r, names] = await Promise.all([readPanes(exec, bin), cachedWorkspaceNames(exec, bin, cache)]);
-  if (!("panes" in r)) return [];
-  return r.panes.map(({ workspaceId, ...p }) => {
-    const workspace = workspaceId ? names.get(workspaceId) : undefined;
-    return workspace ? { ...p, workspace } : p;
-  });
+  if (!("panes" in r)) return r;
+  return {
+    panes: r.panes.map(({ workspaceId, ...p }) => {
+      const workspace = workspaceId ? names.get(workspaceId) : undefined;
+      return workspace ? { ...p, workspace } : p;
+    }),
+  };
+}
+
+export async function listPanes(exec: Exec = bunExec, bin = defaultBin(), cache: WorkspaceCache = sharedWorkspaceCache): Promise<Pane[]> {
+  const r = await readNamedPanes(exec, bin, cache);
+  return "panes" in r ? r.panes : [];
 }
 
 export const herdrPromptText = (bundleId: string) =>

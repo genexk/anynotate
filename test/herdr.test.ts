@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { bunExec, type Exec } from "../src/bridge/exec";
-import { herdrBin, herdrPromptText, listPanes, newWorkspaceCache, WORKSPACE_CACHE_MS, WORKSPACE_LIST_TIMEOUT_MS, PROMPT_TIMEOUT_MS, promptPane, readPanes, waitIdle } from "../src/bridge/herdr";
+import { herdrBin, herdrPromptText, listPanes, newWorkspaceCache, WORKSPACE_CACHE_MS, WORKSPACE_LIST_TIMEOUT_MS, PROMPT_TIMEOUT_MS, promptPane, readNamedPanes, readPanes, waitIdle } from "../src/bridge/herdr";
 import { STALE_CLAIM_MS } from "../src/inbox/store";
 
 const originalHome = process.env.ANYNOTATE_HOME;
@@ -145,4 +145,13 @@ test("bunExec says when it stopped a command for running past its timeout", asyn
   const r = await bunExec([process.execPath, "-e", "await Bun.sleep(5000)"], 200);
   expect(r.code).not.toBe(0);
   expect(r.stderr).toContain("timed out after 200 ms");
+});
+
+test("readNamedPanes names workspaces with the [n] prefix stripped and passes herdr errors through", async () => {
+  const agents = JSON.stringify({ result: { agents: [{ agent: "claude", agent_status: "idle", cwd: "/r1", pane_id: "w4:pV", workspace_id: "w4" }] } });
+  const workspaces = JSON.stringify({ result: { workspaces: [{ workspace_id: "w4", label: "[3] research" }] } });
+  const ok = await readNamedPanes(fakeExec({ "agent list": { code: 0, stdout: agents }, "workspace list": { code: 0, stdout: workspaces } }, []), "herdr", newWorkspaceCache());
+  expect(ok).toEqual({ panes: [{ pane: "w4:pV", agent: "claude", cwd: "/r1", title: "", status: "idle", workspace: "research" }] });
+  const failed = await readNamedPanes(fakeExec({ "agent list": { code: 2, stderr: "server not running" } }, []), "herdr", newWorkspaceCache());
+  expect(failed).toEqual({ error: "server not running" });
 });

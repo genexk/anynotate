@@ -71,7 +71,7 @@ describe.each(PAGES)("site/%s", (page) => {
   });
 
   test("uses the current stylesheet version", () => {
-    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=4"/);
+    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=5"/);
   });
 
   test("holds no personal paths or addresses", () => {
@@ -89,7 +89,13 @@ describe.each(PAGES)("site/%s", (page) => {
 });
 
 test("the stylesheet loads nothing from other origins", () => {
-  expect(readFileSync(join(SITE, "style.css"), "utf8")).not.toMatch(/url\(|@import/);
+  const css = readFileSync(join(SITE, "style.css"), "utf8");
+  expect(css).not.toMatch(/@import/);
+  const urls = [...css.matchAll(/url\(\s*["']?([^"')]+)/g)].map((m) => m[1]!);
+  for (const url of urls) {
+    expect(url, url).not.toMatch(/^(?:[a-z]+:|\/)/i);
+    expect(existsSync(join(SITE, url)), url).toBe(true);
+  }
 });
 
 describe("site/guide", () => {
