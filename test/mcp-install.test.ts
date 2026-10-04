@@ -25,6 +25,8 @@ function opts(over: Partial<McpOptions> = {}): McpOptions & { ran: string[][]; o
   return { platform: "darwin", home, env: {}, entry: ENTRY, which: () => null, exec, now: NOW, applications: join(home, "SystemApplications"), log: (l) => out.push(l), ran, out, ...over };
 }
 
+const hostOpts = (over: Partial<McpOptions> = {}) => opts({ platform: process.platform === "win32" ? "win32" : "linux", ...over });
+
 const desktopDir = () => join(home, "Library", "Application Support", "Claude");
 const desktopFile = () => join(desktopDir(), "claude_desktop_config.json");
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
@@ -457,12 +459,12 @@ test("mcp uninstall --<app> is remembered so install and update leave that app o
 
 test("a dry-run uninstall records no choice, and ANYNOTATE_HOME moves the record", () => {
   mkdirSync(join(home, ".cursor"));
-  runMcpSetup(["uninstall", "--cursor", "--dry-run"], opts());
+  runMcpSetup(["uninstall", "--cursor", "--dry-run"], hostOpts());
   expect(existsSync(prefsFile())).toBe(false);
   const data = join(home, "elsewhere");
-  runMcpSetup(["uninstall", "--cursor"], opts({ env: { ANYNOTATE_HOME: data } }));
+  runMcpSetup(["uninstall", "--cursor"], hostOpts({ env: { ANYNOTATE_HOME: data } }));
   expect(readJson(join(data, "mcp.json"))).toEqual({ declined: ["cursor"] });
-  expect(readDeclined(opts())).toEqual([]);
+  expect(readDeclined(hostOpts())).toEqual([]);
 });
 
 test("detection on Linux: Cursor, Codex and Claude Code; never Claude Desktop", () => {
@@ -528,15 +530,15 @@ test("a malformed mcp.json stops auto-add for the run, says which file, and doct
   mkdirSync(join(home, ".cursor"));
   mkdirSync(join(home, ".anynotate"));
   writeFileSync(prefsFile(), "{oops");
-  const o = opts();
+  const o = hostOpts();
   autoMcpInstall(o);
   expect(existsSync(cursorFile())).toBe(false);
   expect(o.out).toEqual([`MCP: skipped — ${prefsFile()} is not valid JSON; fix or delete it, then run \`anynotate install\``]);
-  const checks = mcpChecks(opts());
+  const checks = mcpChecks(hostOpts());
   expect(checks.find((c) => c.name === "mcp settings")).toMatchObject({ ok: "warn", detail: expect.stringContaining(prefsFile()) });
   expect(checks.find((c) => c.name === "mcp (cursor)")?.ok).toBe(true);
   writeFileSync(prefsFile(), '{"declined":"cursor"}');
-  const shape = opts();
+  const shape = hostOpts();
   autoMcpInstall(shape);
   expect(shape.out[0]).toContain("is not valid");
   expect(readFileSync(prefsFile(), "utf8")).toBe('{"declined":"cursor"}');
