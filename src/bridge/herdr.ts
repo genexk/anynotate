@@ -4,7 +4,7 @@ import { AGENT_NAME, type Agent } from "@anynotate/protocol";
 import { inboxDir } from "../inbox/paths";
 import { bunExec, type Exec } from "./exec";
 
-export type Pane = { pane: string; agent: Agent; cwd: string; title: string; status: string };
+export type Pane = { pane: string; agent: Agent; cwd: string; title: string; status: string; workspace?: string; workspaceId?: string };
 
 const NOT_AN_AGENT = new Set(["unknown", "none"]);
 const isAgentName = (v: unknown): v is Agent => typeof v === "string" && AGENT_NAME.test(v) && !NOT_AN_AGENT.has(v);
@@ -36,13 +36,54 @@ export async function readPanes(exec: Exec = bunExec, bin = defaultBin()): Promi
         cwd: a.cwd ?? "",
         title: a.terminal_title_stripped ?? "",
         status: a.agent_status ?? "unknown",
+        ...(a.workspace_id ? { workspaceId: a.workspace_id } : {}),
       })),
   };
 }
 
-export async function listPanes(exec: Exec = bunExec, bin = defaultBin()): Promise<Pane[]> {
-  const r = await readPanes(exec, bin);
-  return "panes" in r ? r.panes : [];
+const WORKSPACE_NAME_MAX = 60;
+const displayName = (v: unknown) =>
+  typeof v === "string" ? Array.from(v.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim()).slice(0, WORKSPACE_NAME_MAX).join("") : "";
+
+export const WORKSPACE_LIST_TIMEOUT_MS = 1500;
+export const WORKSPACE_CACHE_MS = 10_000;
+const workspaceLabel = (v: unknown) => displayName(typeof v === "string" ? v.replace(/^\s*\[\d+\]\s*/, "") : v);
+
+export async function readWorkspaceNames(exec: Exec = bunExec, bin = defaultBin()): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  const r = await exec([bin, "workspace", "list"], WORKSPACE_LIST_TIMEOUT_MS);
+  if (r.code !== 0) return names;
+  try {
+    for (const w of (JSON.parse(r.stdout).result?.workspaces ?? []) as Record<string, unknown>[]) {
+      const name = workspaceLabel(w.label);
+      if (typeof w.workspace_id === "string" && name) names.set(w.workspace_id, name);
+    }
+  } catch {
+    return names;
+  }
+  return names;
+}
+
+export type WorkspaceCache = { now: () => number; entry?: { bin: string; at: number; names: Promise<Map<string, string>> } };
+export const newWorkspaceCache = (now: () => number = Date.now): WorkspaceCache => ({ now });
+const sharedWorkspaceCache = newWorkspaceCache();
+
+function cachedWorkspaceNames(exec: Exec, bin: string, cache: WorkspaceCache): Promise<Map<string, string>> {
+  const at = cache.now();
+  const e = cache.entry;
+  if (e && e.bin === bin && at - e.at < WORKSPACE_CACHE_MS) return e.names;
+  const names = readWorkspaceNames(exec, bin).catch(() => new Map<string, string>());
+  cache.entry = { bin, at, names };
+  return names;
+}
+
+export async function listPanes(exec: Exec = bunExec, bin = defaultBin(), cache: WorkspaceCache = sharedWorkspaceCache): Promise<Pane[]> {
+  const [r, names] = await Promise.all([readPanes(exec, bin), cachedWorkspaceNames(exec, bin, cache)]);
+  if (!("panes" in r)) return [];
+  return r.panes.map(({ workspaceId, ...p }) => {
+    const workspace = workspaceId ? names.get(workspaceId) : undefined;
+    return workspace ? { ...p, workspace } : p;
+  });
 }
 
 export const herdrPromptText = (bundleId: string) =>

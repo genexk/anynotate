@@ -105,6 +105,7 @@
         <a class="zoom" href="../img/guide/3-pick-element.png"><img src="../img/guide/3-pick-element.png" width="1280" height="800" loading="lazy" alt="The crosshair in the panel is pressed. The Print recipe button has a blue outline and a dark label above it reads main › div.actions › button#print."></a>
         <figcaption>The outline and label show the element under the pointer.</figcaption>
       </figure>
+      <p>A frame embedded from another site, such as an AI chat artifact or an embedded tool, is picked as a whole at first. Click into it and the panel asks <strong>Annotate inside frames from</strong> that site; press <strong>Allow</strong> and Chrome asks you to let Anynotate in for that one site. After that you can select text, pick elements and draw regions inside its frames like anywhere else. Allowed sites are listed in the extension's options, each with a <strong>Remove</strong> button. Payment forms from card providers are never entered.</p>
     </section>
 
     <section class="guide-section" id="region" aria-labelledby="region-title">
@@ -162,6 +163,7 @@
         <li>To remove a note, click the bin in its row.</li>
         <li>Optionally, add an overall note for the whole page in the box under the list.</li>
       </ol>
+      <p>Notes stay attached when the page changes around them, including text that keeps ticking, such as an age like <em>36s</em> or a counter. If the text a note was on is gone from the page, the note is still sent, with the crop taken when you made it, and marked <strong>Not on the page when sent</strong>.</p>
       <figure class="shot">
         <a class="zoom" href="../img/guide/4-notes-light.png"><picture>
           <source srcset="../img/guide/4-notes-dark.png" media="(prefers-color-scheme: dark)">
@@ -178,13 +180,13 @@
     <section class="guide-section" id="send" aria-labelledby="send-title">
       <h2 id="send-title"><span class="n" aria-hidden="true">7</span>Send to an agent</h2>
       <ol class="howto">
-        <li>Choose where the notes go in the session picker at the bottom of the panel. The ↻ button refreshes the list.</li>
+        <li>Choose where the notes go in the session picker at the bottom of the panel. Each session reads <code>workspace · agent · folder · title</code>, and a line under the picker says how the one you chose gets the notes. The ↻ button refreshes the list.</li>
         <li>Press <strong>Send</strong> (or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> to send to the last place you used). The panel shows a spinner while it captures the page and hands it to the bridge.</li>
         <li>The line under Send tells you when your agent has the notes.</li>
       </ol>
       <div class="shots">
         <figure class="shot small">
-          <a class="zoom" href="../img/guide/6-target-list.png"><img src="../img/guide/6-target-list.png" width="360" height="488" loading="lazy" alt="The session picker opened as a list: under herdr panes, claude · recipes · soup and codex · shop · pricing; under Inbox, a single option, Inbox · any agent can read it."></a>
+          <a class="zoom" href="../img/guide/6-target-list.png"><img src="../img/guide/6-target-list.png" width="360" height="557" loading="lazy" alt="The panel with three notes and its session picker open. Under Sessions: claude · Claude app · weekend trip ⏳, claude · recipes · plan the menu ⏳, kitchen · claude · recipes · soup (selected) and store · codex · shop · pricing; under Inbox, Inbox · any agent can read it. The line under the picker reads Typed into the pane now."></a>
           <figcaption>Pick a session.</figcaption>
         </figure>
         <figure class="shot small">
@@ -201,9 +203,9 @@
           <thead><tr><th>In the picker</th><th>What happens</th></tr></thead>
           <tbody>
             <tr><td>⚡ push</td><td>A session connected live to the bridge gets the notes right away.</td></tr>
-            <tr><td>⌨ herdr panes</td><td>Any agent running in a herdr pane: the notes are typed into the pane as soon as it is idle.</td></tr>
-            <tr><td>⏳ next prompt</td><td>A Claude Code or Codex session gets the notes with the next thing you type there.</td></tr>
-            <tr><td>📥 Inbox</td><td>Saved for later, for any agent or app: it reads them when you ask, with <code>/annotations</code>, <code>anynotate annotations latest</code> or over MCP.</td></tr>
+            <tr><td>Sessions</td><td>Herdr panes and sessions outside herdr, in one list. Any agent in a herdr pane gets the notes typed into the pane as soon as it is idle; the pane's herdr workspace leads its name.</td></tr>
+            <tr><td>… ⏳</td><td>A Claude Code or Codex session outside herdr: the notes arrive with your next message in that session. <strong>Claude app</strong> marks a session in the Claude desktop app.</td></tr>
+            <tr><td>📥 Inbox</td><td>One inbox for any agent or app: it reads the notes when you ask, with <code>/annotations</code>, <code>anynotate annotations latest</code> or over MCP.</td></tr>
           </tbody>
         </table>
       </div>
@@ -287,6 +289,7 @@
       <ul class="howto plain">
         <li><strong>Bridge</strong> shows whether the bridge answers, how many sessions it sees, and the extension and bridge versions.</li>
         <li><strong>Storage</strong> counts the notes you have not sent yet. They live only in your browser; <strong>Clear all unsent notes</strong> removes them.</li>
+        <li><strong>Frames from other sites</strong> lists the sites you allowed Anynotate into; <strong>Remove</strong> takes one away.</li>
         <li><strong>Advanced</strong> is for a bridge on a different port.</li>
       </ul>
       <figure class="shot narrow">

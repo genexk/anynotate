@@ -99,6 +99,8 @@ export const Session = z.object({
   method: z.enum(["push", "herdr", "next-prompt"]),
   pane: z.string().optional(),
   sessionIds: z.array(z.string()).optional(),
+  /** Display name of the herdr workspace a herdr pane is in. */
+  workspace: z.string().optional(),
 });
 export type Session = z.infer<typeof Session>;
 

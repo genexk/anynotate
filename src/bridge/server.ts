@@ -6,6 +6,7 @@ import { readBundle, readStatus, updateStatus, writeBundle } from "../inbox/stor
 import { listPanes as herdrListPanes, type Pane, promptPane, waitIdle } from "./herdr";
 import { Registry } from "./registry";
 import { route, type RouteDeps } from "./router";
+import { createTitler, type TitleQuery } from "./titles";
 
 const MAX_BODY = 50 * 1024 * 1024;
 // POST /bundles answers after at most this long; herdr's idle wait can take minutes, so routing finishes in the background.
@@ -19,6 +20,7 @@ type Opts = {
   routeDeps?: Partial<RouteDeps>;
   listPanes?: () => Promise<Pane[]>;
   routeWaitMs?: number;
+  sessionTitle?: (q: TitleQuery) => string;
 };
 
 function sameToken(given: string | null, token: string): boolean {
@@ -40,6 +42,7 @@ export function createBridge(opts: Opts) {
   const allowed = new Set(opts.allowedOrigins ?? []);
   const listPanes = opts.listPanes ?? (() => herdrListPanes());
   const routeWaitMs = opts.routeWaitMs ?? ROUTE_WAIT_MS;
+  const sessionTitle = opts.sessionTitle ?? createTitler();
   const deps: RouteDeps = {
     registry,
     waitIdle: opts.routeDeps?.waitIdle ?? ((pane) => waitIdle(pane)),
@@ -86,13 +89,14 @@ export function createBridge(opts: Opts) {
             return {
               id: p.pane, agent: p.agent, cwd: p.cwd, title: p.title, method: "herdr", pane: p.pane,
               ...(owner ? { sessionIds: [owner.sessionId] } : {}),
+              ...(p.workspace ? { workspace: p.workspace } : {}),
             };
           });
           // A session tied to a herdr pane is that pane's owner (already listed as the pane) or an exited/child run
           // that will never take another prompt, so only sessions outside herdr are offered for next-prompt delivery.
           const next: Session[] = seen
             .filter((s) => !s.pane && !pushIds.has(s.sessionId))
-            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: "", method: "next-prompt" }));
+            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: sessionTitle(s), method: "next-prompt" }));
           return json([...push, ...herdr, ...next]);
         }
 

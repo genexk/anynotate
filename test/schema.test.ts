@@ -122,3 +122,10 @@ test("frames is an optional list of iframe selectors on the anchor", () => {
   x.annotations[0].anchor.frames = "iframe#card";
   expect(BundleInput.safeParse(x).success).toBe(false);
 });
+
+test("a session may name its herdr workspace", () => {
+  const base = { id: "w1:p2", agent: "claude", cwd: "/home/me/project", title: "shell", method: "herdr", pane: "w1:p2" };
+  expect(Session.parse({ ...base, workspace: "shop" }).workspace).toBe("shop");
+  expect(Session.parse(base).workspace).toBeUndefined();
+  expect(Session.safeParse({ ...base, workspace: 3 }).success).toBe(false);
+});

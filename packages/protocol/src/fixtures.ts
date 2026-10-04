@@ -57,14 +57,14 @@ export type Exchange = {
   response: { schema: SchemaName; example: unknown };
 };
 
-const health = { ok: true, bridgeVersion: "0.6.0", protocol: { version: 2, min: 1 } };
+const health = { ok: true, bridgeVersion: "0.6.1", protocol: { version: 2, min: 1 } };
 const queued = { state: "queued", at: "2026-09-24T15:32:01.000Z" };
 const exampleBundle = { ...exampleBundleInput, id: EXAMPLE_BUNDLE_ID, files: { page: "page.md", screenshot: "screenshot.png" } };
 
 export const conformance: Exchange[] = [
   { name: "health-extension", request: { method: "POST", path: "/health", auth: "extension" }, status: 200, response: { schema: "HealthResponse", example: health } },
   { name: "health-probe", request: { method: "GET", path: "/health", auth: "none" }, status: 200, response: { schema: "HealthResponse", example: health } },
-  { name: "sessions-extension", request: { method: "POST", path: "/sessions", auth: "extension" }, status: 200, response: { schema: "SessionsResponse", example: [{ id: "w1:p2", agent: "claude", cwd: "/home/me/project", title: "shell", method: "herdr", pane: "w1:p2" }] } },
+  { name: "sessions-extension", request: { method: "POST", path: "/sessions", auth: "extension" }, status: 200, response: { schema: "SessionsResponse", example: [{ id: "w1:p2", agent: "claude", cwd: "/home/me/project", title: "shell", method: "herdr", pane: "w1:p2", workspace: "project" }] } },
   { name: "sessions-token", request: { method: "GET", path: "/sessions", auth: "token" }, status: 200, response: { schema: "SessionsResponse", example: [] } },
   { name: "sessions-extension-no-token", request: { method: "POST", path: "/sessions", auth: "extension-no-token" }, status: 401, response: { schema: "ErrorResponse", example: { error: "bad token" } } },
   { name: "sessions-unauthenticated", request: { method: "POST", path: "/sessions", auth: "none" }, status: 401, response: { schema: "ErrorResponse", example: { error: "bad token" } } },

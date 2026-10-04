@@ -26,10 +26,14 @@ function regionLine(a: Annotation, uploaded: ReadonlySet<string>): string | unde
   return `Region: ${n(r.w)}×${n(r.h)} at (${n(r.x)}, ${n(r.y)})${on}${crop}`;
 }
 
+export const offscreenLine = (hasCrop: boolean) =>
+  hasCrop ? "Not on the page when sent — crop is from when the note was made." : "Not on the page when sent.";
+
 function section(a: Annotation, uploaded: ReadonlySet<string>): string {
   const directive = a.intent && (INTENTS as readonly string[]).includes(a.intent) ? DIRECTIVES[a.intent as Intent] : undefined;
-  const head = [a.id, a.kind, directive ? undefined : a.intent, where(a)].filter(Boolean).join(" · ") + (a.offscreen ? " (off-screen when sent)" : "");
+  const head = [a.id, a.kind, directive ? undefined : a.intent, where(a)].filter(Boolean).join(" · ");
   const lines = [`## ${head}`];
+  if (a.offscreen) lines.push(offscreenLine(uploaded.has(a.crop)));
   if (directive) lines.push(directive);
   if (a.anchor.quote) lines.push(`> quote: "${a.anchor.quote.exact}"`);
   const region = regionLine(a, uploaded);

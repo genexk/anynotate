@@ -5,6 +5,7 @@ import { type Annotation, Bundle, INTENTS } from "@anynotate/protocol";
 import { pullTransition } from "../agent/annotations";
 import { rowFor } from "../agent/inbox-data";
 import { archiveDir, inboxDir } from "../inbox/paths";
+import { offscreenLine } from "../inbox/readme";
 import { bundleFolderIn } from "../inbox/retention";
 import { latestBundleId, listBundles, readStatus, updateStatus } from "../inbox/store";
 import { describeTarget } from "../inbox/target";
@@ -150,7 +151,8 @@ function renderNotes(bundle: Bundle, dir: string, archived: boolean, fence: (bod
   if (bundle.overall) out.push("", "## Overall request from the user", bundle.overall);
   for (const a of bundle.annotations) {
     const directive = a.intent && (INTENTS as readonly string[]).includes(a.intent) ? DIRECTIVES[a.intent] : a.intent;
-    out.push("", `## ${[a.id, a.kind, directive].filter(Boolean).join(" · ")}${a.offscreen ? " (off-screen when sent)" : ""}`);
+    out.push("", `## ${[a.id, a.kind, directive].filter(Boolean).join(" · ")}`);
+    if (a.offscreen) out.push(offscreenLine(bundleFile(dir, a.crop) !== null));
     out.push(`Comment from the user: ${a.comment || "(no comment)"}`);
     out.push("Where on the page:", fence(notePageContext(a)));
   }

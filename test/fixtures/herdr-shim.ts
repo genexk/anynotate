@@ -11,6 +11,7 @@ const need = (name: string) => {
 appendFileSync(need("HERDR_SHIM_LOG"), `${args.join(" ")}\n`);
 const command = `${args[0] ?? ""} ${args[1] ?? ""}`;
 if (command === "agent list") process.stdout.write(readFileSync(need("HERDR_SHIM_LIST")));
+if (command === "workspace list" && process.env.HERDR_SHIM_WORKSPACES) process.stdout.write(readFileSync(process.env.HERDR_SHIM_WORKSPACES));
 // HERDR_SHIM_ON_PROMPT is JSON { argv, stdin }: a command to run as if the typed prompt had fired the pane's hook.
 if (command === "agent prompt" && process.env.HERDR_SHIM_ON_PROMPT) {
   const { argv, stdin } = JSON.parse(process.env.HERDR_SHIM_ON_PROMPT) as { argv: string[]; stdin: string };

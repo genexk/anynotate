@@ -31,7 +31,7 @@
     <div class="page-hero">
       <span class="eyebrow">Privacy</span>
       <h1>Privacy policy</h1>
-      <p class="meta">Effective date: 2 October 2026</p>
+      <p class="meta">Effective date: 3 October 2026</p>
     </div>
 
     <div class="content">
@@ -65,7 +65,7 @@
           <li>a screenshot of the visible part of the page, and cropped images of the parts you annotated;</li>
           <li>which agent session the notes are for.</li>
         </ul>
-        <p>Before a screenshot is taken, Anynotate covers password, one-time-code and payment-card fields (including text fields named for a password, code or card), and it blanks their values in the text and HTML it copies. This covers the page and its same-origin frames, and card forms embedded from known payment providers (Stripe, Braintree, Adyen, PayPal, Square, Checkout.com, Authorize.net, Klarna, Shopify, Recurly, Chargebee, Paddle, Mollie, Razorpay, Spreedly, VGS, Cybersource). It is best-effort: fields a page doesn't mark, fields inside shadow DOM components and fields in other embedded frames are not covered, so check what's on screen before you send. Anynotate does nothing on a page until you turn it on there.</p>
+        <p>Before a screenshot is taken, Anynotate covers password, one-time-code and payment-card fields (including text fields named for a password, code or card), and it blanks their values in the text and HTML it copies. This covers the page, its same-origin frames, frames from sites you have allowed (a frame that doesn't answer in time is blacked out whole), and card forms embedded from known payment providers (Stripe, Braintree, Adyen, PayPal, Square, Checkout.com, Authorize.net, Klarna, Shopify, Recurly, Chargebee, Paddle, Mollie, Razorpay, Spreedly, VGS, Cybersource). It is best-effort: fields a page doesn't mark, fields inside shadow DOM components and fields in embedded frames from sites you haven't allowed are not covered, so check what's on screen before you send. Anynotate does nothing on a page until you turn it on there.</p>
       </section>
 
       <section class="card" id="where" aria-labelledby="where-title">
@@ -102,6 +102,7 @@
               <tr><td><code>storage</code></td><td>Keeps your unsent notes and your settings in your browser.</td></tr>
               <tr><td><code>nativeMessaging</code></td><td>Asks the small helper that <code>anynotate install</code> set up on your computer for the bridge's access token, so you never have to copy it by hand.</td></tr>
               <tr><td><code>http://127.0.0.1/*</code></td><td>Sends your notes to the bridge on your own computer. The extension has no access to other sites in the background.</td></tr>
+              <tr><td>Optional: one site at a time</td><td>Lets you annotate inside frames a page embeds from another site, such as an AI chat artifact or an embedded tool. Anynotate only asks for it when you click into such a frame and press <strong>Allow</strong>, and Chrome then asks you to approve that one site. Nothing is allowed when you install. Payment providers' frames are never entered. To take a site away, click <strong>Remove</strong> next to it under <strong>Frames from other sites</strong> in the extension's options.</td></tr>
             </tbody>
           </table>
         </div>

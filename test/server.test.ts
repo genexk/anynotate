@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HealthResponse } from "@anynotate/protocol";
+import { HealthResponse, Session } from "@anynotate/protocol";
 import pkg from "../package.json";
 import { createBridge } from "../src/bridge/server";
 import { loadOrCreateToken } from "../src/bridge/token";
@@ -19,6 +19,8 @@ const H = { "X-Anynotate-Token": "tok" };
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "anynotate-"));
   process.env.ANYNOTATE_HOME = home;
+  process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
+  process.env.CODEX_HOME = join(home, "codex");
   bridge = createBridge({
     token: "tok", port: 0, allowedOrigins: ["chrome-extension://abc"],
     listPanes: async () => [{ pane: "w1:p2", agent: "codex", cwd: "/r2", title: "shell", status: "idle" }],
@@ -26,7 +28,13 @@ beforeEach(() => {
   });
   base = `http://127.0.0.1:${bridge.server.port}`;
 });
-afterEach(() => { bridge.server.stop(true); rmSync(home, { recursive: true, force: true }); delete process.env.ANYNOTATE_HOME; });
+afterEach(() => {
+  bridge.server.stop(true);
+  rmSync(home, { recursive: true, force: true });
+  delete process.env.ANYNOTATE_HOME;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CODEX_HOME;
+});
 
 function form(input: unknown) {
   const f = new FormData();
@@ -102,6 +110,35 @@ test("child and older sessions from a pane stay hidden; only the newest same-age
   const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
   expect(s.map((x: any) => `${x.method}:${x.id}`)).toEqual(["herdr:w1:p2"]);
   expect(s.find((x: any) => x.id === "w1:p2").sessionIds).toEqual(["newer"]);
+});
+
+test("next-prompt sessions carry the title from the agent's own transcript", async () => {
+  const sid = "5e55a0aa-0000-4000-8000-000000000001";
+  mkdirSync(join(home, "claude", "projects", "-home-me-shop"), { recursive: true });
+  writeFileSync(join(home, "claude", "projects", "-home-me-shop", `${sid}.jsonl`), `${JSON.stringify({ type: "ai-title", aiTitle: "Fix the cart total" })}\n`);
+  touchSeen("claude", sid, "/home/me/shop");
+  touchSeen("gemini", "g-1", "/r3");
+  const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
+  expect(s.find((x: any) => x.id === sid).title).toBe("Fix the cart total");
+  expect(s.find((x: any) => x.id === "g-1").title).toBe("");
+});
+
+test("a herdr pane carries its workspace name; sessions without one omit the field", async () => {
+  bridge.server.stop(true);
+  bridge = createBridge({
+    token: "tok", port: 0,
+    listPanes: async () => [
+      { pane: "w1:p2", agent: "codex", cwd: "/r2", title: "shell", status: "idle", workspace: "shop" },
+      { pane: "w2:p1", agent: "claude", cwd: "/r1", title: "", status: "idle" },
+    ],
+  });
+  base = `http://127.0.0.1:${bridge.server.port}`;
+  touchSeen("gemini", "g-1", "/r3");
+  const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
+  expect(s.find((x: any) => x.id === "w1:p2").workspace).toBe("shop");
+  expect(s.find((x: any) => x.id === "w2:p1")).not.toHaveProperty("workspace");
+  expect(s.find((x: any) => x.id === "g-1")).not.toHaveProperty("workspace");
+  for (const x of s) expect(Session.safeParse(x).success).toBe(true);
 });
 
 test("SSE delivers pushes to a registered adapter, ack updates status", async () => {

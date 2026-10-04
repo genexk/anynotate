@@ -110,6 +110,14 @@ test("read_notes labels each crop before its image", async () => {
   expect(r.content[i - 1]).toEqual({ type: "text", text: "Crop A1 (crops/A1.png):" });
 });
 
+test("read_notes marks a note that was off the page when sent", async () => {
+  writeBundle({ ...sampleInput, annotations: [{ ...note(1), offscreen: true }, { ...note(2), offscreen: true }] }, { "crops/A1.png": png(32) });
+  const text = texts(await run("read_notes", { include_crops: false }));
+  expect(text).toMatch(/## A1[^\n]*\nNot on the page when sent — crop is from when the note was made\.\n/);
+  expect(text).toMatch(/## A2[^\n]*\nNot on the page when sent\.\n/);
+  expect(text).not.toContain("off-screen");
+});
+
 test("read_notes leaves an acked bundle acked", async () => {
   const b = bundle();
   updateStatus(b.id, "t", (s) => ({ ...s, state: "acked", summary: "done" }));

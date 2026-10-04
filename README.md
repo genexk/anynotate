@@ -81,10 +81,10 @@ anynotate status              # one-line health summary; --notify shows it as a 
 
 An agent needs no Anynotate-specific setup to receive notes:
 
-- In a herdr pane, any agent herdr detects is listed in the dock, and a bundle sent to it is typed into the pane as the bundle's README path.
+- In a herdr pane, any agent herdr detects is listed in the dock's Sessions list as `workspace · agent · folder · title`, and a bundle sent to it is typed into the pane as the bundle's README path.
 - Anywhere else, send to the 📥 Inbox in the dock, one target for every agent. Any agent reads it when asked: with `/annotations`, over MCP, from `~/.anynotate/inbox/latest/README.md` or with `anynotate annotations latest`. `inbox/latest` is a symlink to the bundle written last (a junction on Windows); `inbox/latest-id` holds that bundle's id, for when the link can't be created or followed.
 
-The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt.
+The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt. Those sessions share the Sessions list with herdr panes, marked ⏳; one in the Claude desktop app shows `Claude app` as its folder.
 
 ### Desktop apps (MCP)
 

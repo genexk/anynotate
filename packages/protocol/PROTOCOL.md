@@ -4,7 +4,7 @@ The bridge is an HTTP server on `127.0.0.1`, port `47291` by default (`ANYNOTATE
 
 ## Handshake
 
-`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.6.0", "protocol": { "version": 2, "min": 1 } }`.
+`POST /health` (or `GET`) → `{ "ok": true, "bridgeVersion": "0.6.1", "protocol": { "version": 2, "min": 1 } }`.
 
 A client supports a range of protocol versions (the extension: `min 2, max 2`) and calls `compatibility(clientRange, response.protocol)`:
 
@@ -40,7 +40,7 @@ The allow-list is the valid `chrome-extension://` entries from `$ANYNOTATE_HOME/
 | Method and path | Body | Response |
 |---|---|---|
 | `GET` / `POST /health` | — | `HealthResponse` |
-| `GET` / `POST /sessions` | — | `Session[]`: live push sessions, herdr panes (`method: "herdr"`), then sessions seen by the prompt hook outside herdr (`method: "next-prompt"`) |
+| `GET` / `POST /sessions` | — | `Session[]`: live push sessions, herdr panes (`method: "herdr"`), then sessions seen by the prompt hook outside herdr (`method: "next-prompt"`, with the agent's own conversation title when the bridge can read it) |
 | `POST /bundles` | `multipart/form-data`: field `bundle` = JSON `BundleInput`; files `page.md`, `screenshot.png`, optional `snapshot.html`, `crops/A<n>.png` | `201 SendResponse` (`{ id, status }`); `400 ErrorResponse` for an invalid bundle or file name |
 | `POST /bundles/<id>/status`, `GET /bundles/<id>` | — | `BundleStatusResponse` (`{ bundle, status }`; `status` is `null` if the status file is missing or unreadable); `404` if unknown |
 | `POST /bundles/<id>/ack` | `AckRequest` (`{ "summary"?: string }`) | `OkResponse`; `404` if unknown or busy |
@@ -111,8 +111,9 @@ Each entry is a CSS selector for an `<iframe>`, outermost first, resolved in the
 - **v1** — handshake, token-only access, native-host token delivery.
 - **v2** — intents `explain`, `change`, `approve` (legacy `question`, `bug`, `note` still accepted). `PROTOCOL_MIN` stays `1`: a v2 bridge accepts v1 clients.
   - Optional `region` on element annotations (additive, `@anynotate/protocol` 0.4.0, bridge 0.5.1).
-  - Optional `offscreen: true` on any annotation whose target was not on screen at send time (`box` and crop are from when it was last seen); `README.md` adds `(off-screen when sent)` to its heading (additive, same releases).
+  - Optional `offscreen: true` on any annotation whose target was not on the page at send time (`box` and crop are from when the note was made); `README.md` puts "Not on the page when sent — crop is from when the note was made." under its heading (without the crop clause when no crop was sent; additive, same releases; wording since bridge 0.6.1).
   - Optional `anchor.frames` on notes made inside same-origin iframes; `README.md` names the frames after the selector (additive, same releases).
+  - Optional `workspace` on `Session`: the display name of the herdr workspace holding a herdr pane (additive, `@anynotate/protocol` 0.5.0, bridge 0.6.1).
 
 ## Threat model
 

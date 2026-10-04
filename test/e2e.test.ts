@@ -33,10 +33,12 @@ beforeAll(async () => {
   const onPrompt = JSON.stringify({ argv: cliArgv("hook", "--agent", "gemini"), stdin: JSON.stringify({ session_id: "g-e2e", cwd: "/g" }) });
   const herdr = writeHerdrShim(home);
   const list = join(home, "list.json");
-  writeFileSync(list, JSON.stringify({ result: { agents: [{ agent: "gemini", agent_status: "idle", cwd: "/g", pane_id: "w2:p1", terminal_title_stripped: "gem" }] } }));
+  writeFileSync(list, JSON.stringify({ result: { agents: [{ agent: "gemini", agent_status: "idle", cwd: "/g", pane_id: "w2:p1", workspace_id: "w2", terminal_title_stripped: "gem" }] } }));
+  const workspaces = join(home, "workspaces.json");
+  writeFileSync(workspaces, JSON.stringify({ result: { workspaces: [{ workspace_id: "w2", label: "garden", number: 1 }] } }));
 
   // Port 0 lets the OS pick a free port, so no fixed range can collide with a reserved one (Windows reserves some).
-  const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: "0", ANYNOTATE_HERDR: herdr, HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
+  const env = { ...process.env, ANYNOTATE_HOME: home, ANYNOTATE_PORT: "0", ANYNOTATE_HERDR: herdr, HERDR_SHIM_LOG: shimLog, HERDR_SHIM_LIST: list, HERDR_SHIM_WORKSPACES: workspaces, CLAUDE_CONFIG_DIR: join(home, "claude"), CODEX_HOME: join(home, "codex"), HERDR_SHIM_ON_PROMPT: onPrompt, HERDR_SHIM_ON_PROMPT_OUT: promptHookOut };
   const proc = Bun.spawn(cliArgv("bridge"), { env, stdout: "pipe", stderr: "inherit" });
   const port = await waitForListening(proc);
   if (port) {
@@ -68,9 +70,9 @@ const send = (target: object): Promise<{ id: string; status: { state: string; vi
 
 const getStatus = async (id: string) => (await (await fetch(`${base}/bundles/${id}`, { headers: auth() })).json()).status;
 
-test("sessions lists the herdr pane", async () => {
+test("sessions lists the herdr pane with its workspace name", async () => {
   const s = await (await fetch(`${base}/sessions`, { headers: auth() })).json();
-  expect(s).toContainEqual(expect.objectContaining({ method: "herdr", agent: "gemini", pane: "w2:p1" }));
+  expect(s).toContainEqual(expect.objectContaining({ method: "herdr", agent: "gemini", pane: "w2:p1", workspace: "garden" }));
 });
 
 test("pane target is typed into herdr with the path-only prompt", async () => {

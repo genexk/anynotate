@@ -99,12 +99,14 @@ test("a region note renders like an element note plus a region line pointing at 
   expect(renderReadme(b, uploaded)).toContain("Region: 420×180 at (310, 96) on <canvas#board>\n");
 });
 
-test("an off-screen note says so in its heading, others do not", () => {
+test("a note that was off the page when sent says so under its heading, with the crop's age when there is one", () => {
   const a = sampleInput.annotations[0]!;
-  const b = Bundle.parse({ ...bundle, annotations: [bundle.annotations[0], { ...a, id: "A2", offscreen: true }] });
-  const md = renderReadme(b, uploaded);
-  expect(md).toContain('## A2 · text · question · under "Ingredients" (off-screen when sent)\n');
-  expect(md.match(/off-screen when sent/g)).toHaveLength(1);
+  const b = Bundle.parse({ ...bundle, annotations: [bundle.annotations[0], { ...a, id: "A2", crop: "crops/A2.png", offscreen: true }, { ...a, id: "A3", crop: "crops/A3.png", offscreen: true }] });
+  const md = renderReadme(b, new Set([...uploaded, "crops/A2.png"]));
+  expect(md).toContain('## A2 · text · question · under "Ingredients"\nNot on the page when sent — crop is from when the note was made.\n');
+  expect(md).toContain('## A3 · text · question · under "Ingredients"\nNot on the page when sent.\n');
+  expect(md.match(/Not on the page when sent/g)).toHaveLength(2);
+  expect(md).not.toContain("off-screen");
 });
 
 test("a note inside an iframe names the frames after its selector", () => {

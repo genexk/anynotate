@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { bunExec, type Exec } from "../src/bridge/exec";
-import { herdrBin, herdrPromptText, listPanes, PROMPT_TIMEOUT_MS, promptPane, readPanes, waitIdle } from "../src/bridge/herdr";
+import { herdrBin, herdrPromptText, listPanes, newWorkspaceCache, WORKSPACE_CACHE_MS, WORKSPACE_LIST_TIMEOUT_MS, PROMPT_TIMEOUT_MS, promptPane, readPanes, waitIdle } from "../src/bridge/herdr";
 import { STALE_CLAIM_MS } from "../src/inbox/store";
 
 const originalHome = process.env.ANYNOTATE_HOME;
@@ -34,6 +34,57 @@ test("listPanes keeps every agent herdr detects and drops panes without a usable
     { pane: "w1:p2", agent: "codex", cwd: "/r2", title: "", status: "working" },
     { pane: "w1:p3", agent: "agy", cwd: "/r3", title: "", status: "idle" },
   ]);
+});
+
+test("listPanes names each pane's workspace, reading the workspace list alongside the panes", async () => {
+  const agents = JSON.stringify({ result: { agents: [
+    { agent: "claude", agent_status: "idle", cwd: "/r1", pane_id: "w4:pV", workspace_id: "w4" },
+    { agent: "codex", agent_status: "idle", cwd: "/r2", pane_id: "w1:p2", workspace_id: "w1" },
+    { agent: "claude", agent_status: "idle", cwd: "/r3", pane_id: "w9:p1", workspace_id: "w9" },
+  ] } });
+  const workspaces = JSON.stringify({ result: { type: "workspace_list", workspaces: [
+    { workspace_id: "w4", label: "[1] shop", number: 1 },
+    { workspace_id: "w1", label: "  docs\nsite ", number: 2 },
+  ] } });
+  const calls: string[][] = [];
+  const timeouts: Record<string, number | undefined> = {};
+  const base = fakeExec({ "agent list": { code: 0, stdout: agents }, "workspace list": { code: 0, stdout: workspaces } }, calls);
+  const exec: Exec = (argv, t) => { timeouts[argv.slice(1, 3).join(" ")] = t; return base(argv, t); };
+  const panes = await listPanes(exec, "herdr", newWorkspaceCache());
+  expect(panes.map((p) => [p.pane, p.workspace])).toEqual([["w4:pV", "shop"], ["w1:p2", "docs site"], ["w9:p1", undefined]]);
+  expect(panes[2]).not.toHaveProperty("workspace");
+  expect(panes[0]).not.toHaveProperty("workspaceId");
+  expect(calls.map((c) => c.slice(1).join(" ")).sort()).toEqual(["agent list", "workspace list"]);
+  expect(timeouts["workspace list"]).toBeLessThanOrEqual(WORKSPACE_LIST_TIMEOUT_MS);
+  expect(WORKSPACE_LIST_TIMEOUT_MS).toBeLessThanOrEqual(1500);
+});
+
+test("workspace names are reused for a short while, then read again", async () => {
+  const agents = JSON.stringify({ result: { agents: [{ agent: "claude", agent_status: "idle", cwd: "/r1", pane_id: "w4:pV", workspace_id: "w4" }] } });
+  const ws = (label: string) => JSON.stringify({ result: { workspaces: [{ workspace_id: "w4", label }] } });
+  let label = "first";
+  const calls: string[][] = [];
+  const exec: Exec = async (argv) => {
+    calls.push(argv);
+    return { code: 0, stdout: argv[1] === "agent" ? agents : ws(label), stderr: "" };
+  };
+  let now = 1_000_000;
+  const cache = newWorkspaceCache(() => now);
+  expect((await listPanes(exec, "herdr", cache))[0]!.workspace).toBe("first");
+  label = "second";
+  now += WORKSPACE_CACHE_MS - 1;
+  expect((await listPanes(exec, "herdr", cache))[0]!.workspace).toBe("first");
+  now += 2;
+  expect((await listPanes(exec, "herdr", cache))[0]!.workspace).toBe("second");
+  expect(calls.filter((c) => c[1] === "workspace")).toHaveLength(2);
+});
+
+test("listPanes keeps panes without workspace names when workspace list fails", async () => {
+  const agents = JSON.stringify({ result: { agents: [{ agent: "claude", agent_status: "idle", cwd: "/r1", pane_id: "w4:pV", workspace_id: "w4" }] } });
+  for (const ws of [{ code: 1, stderr: "old herdr" }, { code: 0, stdout: "nope" }]) {
+    const panes = await listPanes(fakeExec({ "agent list": { code: 0, stdout: agents }, "workspace list": ws }, []), "herdr", newWorkspaceCache());
+    expect(panes).toEqual([{ pane: "w4:pV", agent: "claude", cwd: "/r1", title: "", status: "idle" }]);
+  }
 });
 
 test("listPanes returns [] when herdr fails or prints junk", async () => {
