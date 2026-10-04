@@ -116,3 +116,10 @@ test("a note inside an iframe names the frames after its selector", () => {
   expect(md).toContain("Crop: crops/A2.png · selector: `p#inner` inside iframe `iframe#card` › `iframe.nested`\n");
   expect(md.match(/inside iframe/g)).toHaveLength(1);
 });
+
+test("a bundle from an older extension says so right under the title; an equal or newer one does not", () => {
+  const second = (sender: string | null) => renderReadme(bundle, uploaded, sender).split("\n")[1];
+  expect(second("0.2.0")).toBe("Note: sent from extension 0.2.0; 0.3.1 or later is expected, so some details may be missing.");
+  expect(second("unknown")).toBe("Note: sent from an older extension; 0.3.1 or later is expected, so some details may be missing.");
+  for (const s of ["0.3.1", "0.4.0", null]) expect(second(s)).toStartWith("Sent ");
+});

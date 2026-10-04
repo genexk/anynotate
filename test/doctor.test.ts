@@ -64,7 +64,7 @@ test("a healthy Linux install passes every check and exits 0", async () => {
   const f = linuxFake();
   const checks = await runDoctor(options(f));
   expect(checks.filter((c) => c.ok !== true)).toEqual([]);
-  expect(checks.map((c) => c.name)).toEqual(["install", "on PATH", "service", "bridge", "token", "native host (chrome)", "hooks (claude)", "hooks (codex)", "retention"]);
+  expect(checks.map((c) => c.name)).toEqual(["install", "on PATH", "service", "bridge", "token", "extension", "native host (chrome)", "hooks (claude)", "hooks (codex)", "retention"]);
   expect(byName(checks, "service")!.detail).toContain("enabled");
   expect(f.ran).toContainEqual(["systemctl", "--user", "is-enabled", "anynotate-bridge.service"]);
   const { text, code } = formatChecks(checks);
@@ -328,4 +328,25 @@ test("the summary lists only the non-zero counts", () => {
   expect(last([c(false), c(false), c("warn"), c("warn", true)])).toBe("2 failed, 1 warning(s), 1 skipped — see above.");
   expect(last([c(true), c("warn", true)])).toBe("1 skipped — see above.");
   expect(formatChecks([c("warn"), c("warn", true)]).code).toBe(0);
+});
+
+test("the extension check shows the last extension version the bridge saw", async () => {
+  const f = linuxFake();
+  const ext = (checks: Check[]) => byName(checks, "extension")!;
+  expect(ext(await runDoctor(options(f)))).toEqual({ name: "extension", ok: true, detail: "none has connected to the bridge yet" });
+  f.files["/home/me/.anynotate/extension-version"] = "0.3.1\n";
+  expect(ext(await runDoctor(options(f)))).toEqual({ name: "extension", ok: true, detail: "0.3.1 last seen", extension: "0.3.1" });
+  f.files["/home/me/.anynotate/extension-version"] = "0.10.0\n";
+  expect(ext(await runDoctor(options(f))).ok).toBe(true);
+  f.files["/home/me/.anynotate/extension-version"] = "0.2.0\n";
+  const old = ext(await runDoctor(options(f)));
+  expect(old).toEqual({
+    name: "extension", ok: "warn", extension: "0.2.0",
+    detail: "0.2.0 last seen; 0.3.1 or later is expected — update it in chrome://extensions, or wait for the Chrome Web Store auto-update",
+  });
+  expect(formatChecks([old]).text.split("\n")[0]).toBe(`! extension  ${old.detail}`);
+  f.files["/home/me/.anynotate/extension-version"] = "unknown\n";
+  expect(ext(await runDoctor(options(f))).detail).toStartWith("an older extension (no version reported) last seen; 0.3.1 or later is expected");
+  f.files["/home/me/.anynotate/extension-version"] = "<script>\n";
+  expect(ext(await runDoctor(options(f))).detail).toBe("none has connected to the bridge yet");
 });

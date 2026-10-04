@@ -13,8 +13,8 @@ const repo = join(import.meta.dir, "..");
 const read = (rel: string) => readFileSync(join(repo, rel), "utf8");
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-test("the release is 0.6.3", () => {
-  expect(pkg.version).toBe("0.6.3");
+test("the release is 0.6.4", () => {
+  expect(pkg.version).toBe("0.6.4");
 });
 
 test("every target's file is the asset name self-update downloads", () => {
@@ -86,7 +86,7 @@ describe.skipIf(!compileWorks || !host || process.platform === "win32")("the com
           return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
         };
 
-        expect(run("--version").out.trim()).toBe("0.6.3");
+        expect(run("--version").out.trim()).toBe("0.6.4");
 
         const pinned = `chrome-extension://${(JSON.parse(read("assets/extension-ids.json")) as string[])[0]}/`;
         const askToken = (...args: string[]) => {
@@ -122,7 +122,7 @@ describe.skipIf(!compileWorks || !host || process.platform === "win32")("the com
         expect(readFileSync(join(home, ".anynotate", "origins"), "utf8")).toBe(origins.map((o) => `${o}\n`).join(""));
         expect(existsSync(toml)).toBe(false);
         const record = JSON.parse(readFileSync(join(home, ".anynotate", "install.json"), "utf8"));
-        expect(record).toMatchObject({ kind: "binary", path: exe, version: "0.6.3" });
+        expect(record).toMatchObject({ kind: "binary", path: exe, version: "0.6.4" });
         expect(existsSync(join(home, ".anynotate", "native-host"))).toBe(false);
       } finally {
         rmSync(work, { recursive: true, force: true });

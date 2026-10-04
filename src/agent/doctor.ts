@@ -10,10 +10,12 @@ import { LAUNCHD_LABEL, planService, SYSTEMD_UNIT, WINDOWS_TASK } from "../platf
 import { HOOKED_CLIS, isAnynotateHook } from "./install";
 import { INSTALL_RECORD, type InstallRecord } from "./installkind";
 import { mcpChecks } from "../mcp/install";
+import { EXPECTED_EXTENSION, EXTENSION_FILE, EXTENSION_UPDATE_HINT, extensionIsOlder, parseSender, UNKNOWN_EXTENSION } from "../bridge/extension-version";
 
 // ok is false for a failed required check, "warn" for something worth fixing that doesn't stop Anynotate working.
 // skipped marks a check an external dry run did not perform; it shows as a warning and is counted separately.
-export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" | "missing" | "off" };
+// extension is the version the bridge last saw an extension report (UNKNOWN_EXTENSION for one too old to say).
+export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" | "missing" | "off"; extension?: string };
 
 export type DoctorOptions = {
   platform: Platform;
@@ -222,6 +224,15 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     return { name, ok: true, detail: `${commands[0]} in ${file}` };
   };
 
+  const extension = (): Check => {
+    const name = "extension";
+    const seen = parseSender(read(path.join(dataDir, EXTENSION_FILE)));
+    if (!seen) return { name, ok: true, detail: "none has connected to the bridge yet" };
+    if (!extensionIsOlder(seen)) return { name, ok: true, detail: `${seen} last seen`, extension: seen };
+    const what = seen === UNKNOWN_EXTENSION ? "an older extension (no version reported)" : seen;
+    return { name, ok: "warn", detail: `${what} last seen; ${EXPECTED_EXTENSION} or later is expected — ${EXTENSION_UPDATE_HINT}`, extension: seen };
+  };
+
   const retention = (): Check => {
     const r = (o.retention ?? (() => resolveRetention(env)))();
     return r.warning ? { name: "retention", ok: "warn", detail: r.warning } : { name: "retention", ok: true, detail: describeRetention(r) };
@@ -234,6 +245,7 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     service(),
     await bridge(),
     token(),
+    extension(),
     ...present.map(nativeHost),
     ...HOOKED_CLIS.map(({ cli, settings }) => hooks(cli, settings)),
     ...(o.mcpEntry ? mcpChecks({ platform, home, env, entry: o.mcpEntry, which, exec, log: () => {}, exists, readFile }) : []),

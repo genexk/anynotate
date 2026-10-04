@@ -51,7 +51,7 @@ If `~/.local/bin` is not on your `PATH`, the installer says so; add it in your s
 ### Check, update, remove
 
 ```bash
-anynotate doctor               # install, PATH, service, bridge /health, token, Chrome helper, hooks, retention
+anynotate doctor               # install, PATH, service, bridge /health, token, extension, Chrome helper, hooks, retention
 anynotate update --dry-run     # show what an update would do
 anynotate update               # install the latest release and restart the bridge
 anynotate uninstall --dry-run
@@ -59,6 +59,8 @@ anynotate uninstall            # add --purge to delete ~/.anynotate (your notes)
 ```
 
 `doctor` exits non-zero only when a required check fails. `update` downloads the newest release for your platform from GitHub, verifies it against `SHA256SUMS`, replaces the binary and re-runs `install`; on Windows the running binary is moved aside to `anynotate.exe.old`. `uninstall` stops the bridge and removes the service, the Chrome helper registrations, the hooks and skills (a `SKILL.md` you edited is kept), and the binary (on Windows it also takes the bin directory off the user `PATH`). It keeps `~/.anynotate` unless you pass `--purge`.
+
+Out of step? Sending still works: the extension says when the bridge is older than it expects and offers `anynotate update` to copy; a bundle from an older extension says so under its README title and in `read_notes`, and `doctor` and `status` show the last extension version seen.
 
 ### Install from source (development)
 

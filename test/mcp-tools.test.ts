@@ -368,3 +368,15 @@ test("read_notes names the viewport, the target and only the files the bundle ha
 test("list_notes says titles and URLs come from the page", () => {
   expect(tools().list_notes!.description).toMatch(/titles and URLs.*page-controlled/i);
 });
+
+test("read_notes shows the older-extension line under the title, and nothing for a current or unrecorded sender", async () => {
+  const line = async (sender?: string) => {
+    rmSync(inboxDir(), { recursive: true, force: true });
+    writeBundle(sampleInput, {}, new Date(), sender);
+    return texts(await run("read_notes", { include_crops: false })).split("\n")[1];
+  };
+  expect(await line("0.2.0")).toBe("Note: sent from extension 0.2.0; 0.3.1 or later is expected, so some details may be missing.");
+  expect(await line("unknown")).toBe("Note: sent from an older extension; 0.3.1 or later is expected, so some details may be missing.");
+  expect(await line("0.3.1")).toStartWith("Sent ");
+  expect(await line()).toStartWith("Sent ");
+});

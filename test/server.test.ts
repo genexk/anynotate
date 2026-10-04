@@ -61,6 +61,51 @@ test("preflight from the extension is answered", async () => {
   const r = await fetch(`${base}/bundles`, { method: "OPTIONS", headers: { Origin: "chrome-extension://abc" } });
   expect(r.status).toBe(204);
   expect(r.headers.get("access-control-allow-headers")).toContain("X-Anynotate-Token");
+  expect(r.headers.get("access-control-allow-headers")).toContain("X-Anynotate-Extension");
+});
+
+const FROM_EXT = { ...H, Origin: "chrome-extension://abc" };
+const sentReadme = async (headers: Record<string, string>) => {
+  const r = await fetch(`${base}/bundles`, { method: "POST", headers, body: form(sampleInput) });
+  expect(r.status).toBe(201);
+  const { id } = await r.json();
+  return readFileSync(join(home, "inbox", id, "README.md"), "utf8").split("\n");
+};
+const lastSeen = () => {
+  try {
+    return readFileSync(join(home, "extension-version"), "utf8");
+  } catch {
+    return null;
+  }
+};
+
+test("a bundle from the expected extension or a newer one gets no note, and its version is recorded", async () => {
+  expect((await sentReadme({ ...FROM_EXT, "X-Anynotate-Extension": "0.3.1" }))[1]).toStartWith("Sent ");
+  expect(lastSeen()).toBe("0.3.1\n");
+  expect((await sentReadme({ ...FROM_EXT, "X-Anynotate-Extension": "0.10.0" }))[1]).toStartWith("Sent ");
+  expect(lastSeen()).toBe("0.10.0\n");
+});
+
+test("a bundle from an older extension, or one sending no version, gets the note under the title", async () => {
+  expect((await sentReadme({ ...FROM_EXT, "X-Anynotate-Extension": "0.2.0" }))[1]).toBe(
+    "Note: sent from extension 0.2.0; 0.3.1 or later is expected, so some details may be missing.",
+  );
+  expect(lastSeen()).toBe("0.2.0\n");
+  expect((await sentReadme(FROM_EXT))[1]).toBe("Note: sent from an older extension; 0.3.1 or later is expected, so some details may be missing.");
+  expect(lastSeen()).toBe("unknown\n");
+});
+
+test("a client that is not a browser and sends no version is neither noted nor recorded", async () => {
+  expect((await sentReadme(H))[1]).toStartWith("Sent ");
+  expect(lastSeen()).toBeNull();
+});
+
+test("the extension version is recorded from any authenticated request, never from an unauthenticated one", async () => {
+  await fetch(`${base}/sessions`, { method: "POST", headers: { Origin: "chrome-extension://abc", "X-Anynotate-Extension": "0.3.1" } });
+  await fetch(`${base}/health`, { method: "POST", headers: { Origin: "chrome-extension://abc", "X-Anynotate-Extension": "0.3.1" } });
+  expect(lastSeen()).toBeNull();
+  expect((await fetch(`${base}/sessions`, { method: "POST", headers: { ...FROM_EXT, "X-Anynotate-Extension": "0.3.1" } })).status).toBe(200);
+  expect(lastSeen()).toBe("0.3.1\n");
 });
 
 test("POST /bundles writes the inbox and routes", async () => {

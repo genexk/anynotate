@@ -3,6 +3,7 @@ import { Agent, BundleInput, type HealthResponse, PROTOCOL_MIN, PROTOCOL_VERSION
 import pkg from "../../package.json";
 import { listSeen } from "../inbox/seen";
 import { readBundle, readStatus, updateStatus, writeBundle } from "../inbox/store";
+import { EXTENSION_HEADER, extensionRecorder, senderFromHeader } from "./extension-version";
 import { listPanes as herdrListPanes, type Pane, promptPane, waitIdle } from "./herdr";
 import { Registry } from "./registry";
 import { route, type RouteDeps } from "./router";
@@ -21,6 +22,7 @@ type Opts = {
   listPanes?: () => Promise<Pane[]>;
   routeWaitMs?: number;
   sessionTitle?: (q: TitleQuery) => string;
+  recordExtension?: (sender: string) => void;
 };
 
 function sameToken(given: string | null, token: string): boolean {
@@ -43,6 +45,7 @@ export function createBridge(opts: Opts) {
   const listPanes = opts.listPanes ?? (() => herdrListPanes());
   const routeWaitMs = opts.routeWaitMs ?? ROUTE_WAIT_MS;
   const sessionTitle = opts.sessionTitle ?? createTitler();
+  const recordExtension = opts.recordExtension ?? extensionRecorder();
   const deps: RouteDeps = {
     registry,
     waitIdle: opts.routeDeps?.waitIdle ?? ((pane) => waitIdle(pane)),
@@ -53,7 +56,7 @@ export function createBridge(opts: Opts) {
     origin && allowed.has(origin)
       ? {
           "Access-Control-Allow-Origin": origin,
-          "Access-Control-Allow-Headers": "X-Anynotate-Token, Content-Type",
+          "Access-Control-Allow-Headers": `X-Anynotate-Token, ${EXTENSION_HEADER}, Content-Type`,
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           Vary: "Origin",
         }
@@ -78,6 +81,10 @@ export function createBridge(opts: Opts) {
       if (!sameToken(req.headers.get("x-anynotate-token"), opts.token)) return json({ error: "bad token" }, 401);
 
       const parts = url.pathname.split("/").filter(Boolean);
+      // An extension's request carries its Origin; one without the version header comes from a release before it.
+      const extensionHeader = req.headers.get(EXTENSION_HEADER);
+      const sender = extensionHeader !== null || origin ? senderFromHeader(extensionHeader) : undefined;
+      if (sender) recordExtension(sender);
       try {
         if ((req.method === "GET" || req.method === "POST") && url.pathname === "/sessions") {
           const push = registry.live();
@@ -108,7 +115,7 @@ export function createBridge(opts: Opts) {
           for (const [name, value] of form.entries()) {
             if (name !== "bundle" && typeof value !== "string") files[name] = new Uint8Array(await (value as Blob).arrayBuffer());
           }
-          const bundle = writeBundle(parsed.data, files);
+          const bundle = writeBundle(parsed.data, files, new Date(), sender);
           const routing = route(bundle, deps).catch((e) => {
             console.error(`anynotate: routing ${bundle.id} failed:`, e);
           });

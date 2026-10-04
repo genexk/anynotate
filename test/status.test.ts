@@ -110,3 +110,13 @@ test("summarizeChecks says MCP: off when MCP was turned off and nothing is conne
   const checks: Check[] = [pass("bridge"), { name: "mcp (cursor)", ok: true, detail: "off", mcp: "off" }];
   expect(summarizeChecks(checks, "0.6.3").line).toBe("Anynotate 0.6.3 · bridge running · all checks passed · MCP: off");
 });
+
+test("summarizeChecks shows the last extension seen with ✓, or ⚠ and how to update it", () => {
+  const ext = (ok: Check["ok"], extension: string): Check => ({ name: "extension", ok, detail: "", extension });
+  expect(summarizeChecks([pass("bridge"), ext(true, "0.3.1")], "0.6.4").line).toBe("Anynotate 0.6.4 · bridge running · all checks passed · Extension 0.3.1 ✓");
+  expect(summarizeChecks([pass("bridge"), ext("warn", "0.2.0")], "0.6.4").line).toBe(
+    "Anynotate 0.6.4 · bridge running · 1 warning · Extension 0.2.0 ⚠ — update it in chrome://extensions, or wait for the Chrome Web Store auto-update",
+  );
+  expect(summarizeChecks([pass("bridge"), ext("warn", "unknown")], "0.6.4").line).toContain("Extension older than 0.3.1 ⚠ — update it in chrome://extensions");
+  expect(summarizeChecks([pass("bridge"), { name: "extension", ok: true, detail: "none has connected to the bridge yet" }], "0.6.4").line).toBe("Anynotate 0.6.4 · bridge running · all checks passed");
+});

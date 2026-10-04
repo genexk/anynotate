@@ -8,6 +8,7 @@ import { clearLatest, readLatest, writeLatest } from "../platform/latest";
 import { archiveDir, ensureHome, inboxDir } from "./paths";
 import { renderReadme } from "./readme";
 
+export const SENDER_FILE = "extension-version.txt";
 const ALLOWED_FILE = /^(page\.md|screenshot\.png|snapshot\.html|crops\/A\d+\.png)$/;
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -60,7 +61,8 @@ function writeJsonAtomic(path: string, value: unknown, tag: string) {
   renameSync(tmp, path);
 }
 
-export function writeBundle(input: BundleInput, files: Record<string, Uint8Array>, now = new Date()): Bundle {
+// sender is the version the extension reported (or UNKNOWN_EXTENSION); bundles written without one carry no sender file.
+export function writeBundle(input: BundleInput, files: Record<string, Uint8Array>, now = new Date(), sender?: string): Bundle {
   for (const name of Object.keys(files)) {
     if (!ALLOWED_FILE.test(name)) throw new Error(`unexpected file name: ${name}`);
   }
@@ -86,7 +88,8 @@ export function writeBundle(input: BundleInput, files: Record<string, Uint8Array
     writeFileSync(join(tmp, name), bytes);
   }
   writeFileSync(join(tmp, "annotations.json"), JSON.stringify(bundle, null, 2));
-  writeFileSync(join(tmp, "README.md"), renderReadme(bundle, new Set(Object.keys(files))));
+  writeFileSync(join(tmp, "README.md"), renderReadme(bundle, new Set(Object.keys(files)), sender ?? null));
+  if (sender) writeFileSync(join(tmp, SENDER_FILE), `${sender}\n`);
   writeFileSync(join(tmp, "status.json"), JSON.stringify({ state: "queued", at: now.toISOString() } satisfies Status, null, 2));
   renameSync(tmp, join(inbox, id));
   pointLatestAt(id);

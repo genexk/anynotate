@@ -1,4 +1,5 @@
 import { type Annotation, type Bundle, INTENTS, type Intent } from "@anynotate/protocol";
+import { senderNote } from "../bridge/extension-version";
 import { describeTarget } from "./target";
 
 const DIRECTIVES: Record<Intent, string> = {
@@ -44,12 +45,14 @@ function section(a: Annotation, uploaded: ReadonlySet<string>): string {
   return lines.join("\n");
 }
 
-export function renderReadme(b: Bundle, uploaded: ReadonlySet<string>): string {
+export function renderReadme(b: Bundle, uploaded: ReadonlySet<string>, sender: string | null = null): string {
   const n = b.annotations.length;
   const vp = b.annotations[0]?.viewport;
   const target = describeTarget(b.target);
+  const note = senderNote(sender);
   const out = [
     `# Browser notes: "${b.title}" (${b.url})`,
+    ...(note ? [note] : []),
     `Sent ${b.sentAt} · ${n} note${n === 1 ? "" : "s"}${vp ? ` · viewport ${vp.w}×${vp.h}` : ""} · target: ${target}`,
     "",
     "The user annotated this page in their browser and wants you to act on these notes.",

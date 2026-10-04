@@ -44,7 +44,7 @@
           <pre><code id="cmd-doctor">anynotate doctor</code></pre>
           <button class="copy" type="button" data-copy="cmd-doctor">Copy</button>
         </div>
-        <p class="after-cmd">It checks the install, your <code>PATH</code>, the background service, the bridge, its token, the Chrome helper, the agent hooks and the retention setting, and says what to fix. It exits with an error only when something required is broken.</p>
+        <p class="after-cmd">It checks the install, your <code>PATH</code>, the background service, the bridge, its token, the last extension version seen, the Chrome helper, the agent hooks and the retention setting, and says what to fix. It exits with an error only when something required is broken.</p>
       </section>
 
       <nav class="toc" aria-labelledby="toc-title">
@@ -70,6 +70,7 @@ anynotate update               # install the latest release and restart the brid
 anynotate uninstall --dry-run  # show what would be removed
 anynotate uninstall            # add --purge to delete ~/.anynotate (your notes) too</code></pre>
         <p>Re-running <code>anynotate install</code> is always safe: it repairs the setup and restarts the bridge.</p>
+        <p>Versions out of step? Sending still works. The dock and options page say when the bridge is older than the extension expects and offer <code>anynotate update</code>; when the extension is the older one, <code>anynotate doctor</code> and <code>status</code> say so: update it in <code>chrome://extensions</code>, or wait for the Chrome Web Store auto-update.</p>
       </section>
 
       <section class="card" aria-labelledby="problems-title">
