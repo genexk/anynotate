@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from "node:path";
 
 const SITE = resolve(import.meta.dir, "..", "site");
 const PAGES = ["index.html", "guide/index.html", "privacy/index.html", "support/index.html"];
-const ALLOWED_HOSTS = new Set(["github.com", "genexk.github.io"]);
+const ALLOWED_HOSTS = new Set(["github.com", "genexk.github.io", "chromewebstore.google.com", "buymeacoffee.com"]);
 
 function refs(html: string): string[] {
   const attrs = [...html.matchAll(/\s(?:href|src)="([^"]*)"/g)].map((m) => m[1]!);
@@ -50,7 +50,7 @@ describe.each(PAGES)("site/%s", (page) => {
     expect(html()).not.toMatch(/\s(?:src|srcset)="https?:|<link[^>]+href="https?:|url\(\s*["']?https?:/);
   });
 
-  test("links only to github.com and genexk.github.io", () => {
+  test("links only to github.com, genexk.github.io, the Chrome Web Store and Buy me a coffee", () => {
     for (const ref of refs(html()).filter((r) => /^https?:/.test(r))) {
       expect(ALLOWED_HOSTS.has(new URL(ref).hostname), ref).toBe(true);
     }
@@ -70,8 +70,13 @@ describe.each(PAGES)("site/%s", (page) => {
     for (const nav of navs) expect(nav).toMatch(/<a href="(?:\.\.\/)?(?:guide\/|\.\/)"[^>]*>Guide<\/a>/);
   });
 
+  test("links to Buy me a coffee from the footer, in a new tab", () => {
+    const footer = /<footer[\s\S]*?<\/footer>/.exec(html())![0];
+    expect(footer).toContain('<a href="https://buymeacoffee.com/genexk" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>');
+  });
+
   test("uses the current stylesheet version", () => {
-    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=6"/);
+    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=7"/);
   });
 
   test("holds no personal paths or addresses", () => {
