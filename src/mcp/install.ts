@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { Check } from "../agent/doctor";
 import { quoteArgv } from "../agent/installkind";
 import type { Exec } from "../platform/exec";
-import { type Env, pathFor, type Platform } from "../platform/os";
+import { type Env, installPaths, pathFor, type Platform } from "../platform/os";
 
 export const MCP_APPS = ["claude-desktop", "codex", "cursor", "claude-code"] as const;
 export type McpApp = (typeof MCP_APPS)[number];
@@ -74,6 +74,8 @@ export type McpOptions = {
   exists?: (path: string) => boolean;
   readFile?: (path: string) => string;
   listDir?: (path: string) => string[];
+  // Where macOS keeps system-wide apps; tests point it into their own home.
+  applications?: string;
   now?: Date;
 };
 
@@ -247,7 +249,7 @@ type AppState =
   | { state: "unsupported"; reason: string }
   | { state: "app not found" }
   | { state: "not configured" | "configured"; path: string }
-  | { state: "stale"; path: string; command: string }
+  | { state: "stale"; path: string; command: string; custom: boolean }
   | { state: "unreadable"; path: string; error: string };
 
 const readText = (path: string, read: (path: string) => string = (p) => readFileSync(p, "utf8")): string | null => {
@@ -258,19 +260,97 @@ const readText = (path: string, read: (path: string) => string = (p) => readFile
   }
 };
 
+export function findCli(name: string, o: Pick<McpOptions, "platform" | "which">): string | null {
+  const names = o.platform === "win32" ? [name, `${name}.exe`, `${name}.cmd`] : [name];
+  for (const n of names) {
+    const hit = o.which(n);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function desktopInstalled(o: McpOptions): boolean {
+  const exists = o.exists ?? existsSync;
+  if (o.platform === "darwin") return [o.applications ?? "/Applications", pathFor("darwin").join(o.home, "Applications")].some((d) => exists(pathFor("darwin").join(d, "Claude.app")));
+  if (o.platform !== "win32") return false;
+  const path = pathFor("win32");
+  const local = o.env.LOCALAPPDATA?.trim();
+  const localAppData = local && path.isAbsolute(local) ? local : path.join(o.home, "AppData", "Local");
+  if (exists(path.join(localAppData, "AnthropicClaude"))) return true;
+  return (o.listDir ?? listDirOrEmpty)(path.join(localAppData, "Packages")).some((n) => n.startsWith("Claude_"));
+}
+
 function present(app: McpApp, target: McpTarget, o: McpOptions): boolean {
   const exists = o.exists ?? existsSync;
   const path = pathFor(o.platform);
   switch (app) {
     case "claude-desktop":
-      return target.kind !== "unsupported" && exists(dirname(target.path));
+      return target.kind !== "unsupported" && (exists(dirname(target.path)) || desktopInstalled(o));
     case "cursor":
-      return exists(path.join(o.home, ".cursor")) || o.which("cursor") !== null;
+      return exists(path.join(o.home, ".cursor")) || findCli("cursor", o) !== null;
     case "codex":
-      return exists(path.join(o.home, ".codex")) || o.which("codex") !== null;
+      return exists(path.join(o.home, ".codex")) || findCli("codex", o) !== null;
     case "claude-code":
-      return o.which("claude") !== null || exists(path.join(o.home, ".claude")) || exists(path.join(o.home, ".claude.json"));
+      return findCli("claude", o) !== null || exists(path.join(o.home, ".claude")) || exists(path.join(o.home, ".claude.json"));
   }
+}
+
+const PREFS_FILE = "mcp.json";
+const prefsPath = (o: Pick<McpOptions, "platform" | "home" | "env">) => pathFor(o.platform).join(installPaths(o.platform, o.home, o.env).dataDir, PREFS_FILE);
+
+type Prefs = { declined: McpApp[] } | { broken: string };
+
+function readPrefs(o: Pick<McpOptions, "platform" | "home" | "env">): Prefs {
+  const path = prefsPath(o);
+  const text = readText(path);
+  if (text === null) return { declined: [] };
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { broken: `${path} is not valid JSON` };
+  }
+  if (!isObject(value) || (value.declined !== undefined && !Array.isArray(value.declined))) return { broken: `${path} is not valid (expected {"declined": [...]})` };
+  const declined: unknown[] = value.declined ?? [];
+  return { declined: MCP_APPS.filter((a) => declined.includes(a)) };
+}
+
+export function readDeclined(o: Pick<McpOptions, "platform" | "home" | "env">): McpApp[] {
+  const p = readPrefs(o);
+  return "declined" in p ? p.declined : [];
+}
+
+function writeDeclined(o: McpOptions, prefs: Record<string, unknown>, declined: McpApp[]): void {
+  const path = prefsPath(o);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeAtomic(path, formatJson({ ...prefs, declined }), existsSync(path), o.platform);
+}
+
+function rememberChoice(o: McpOptions, apps: McpApp[], decline: boolean): void {
+  const prefs = readPrefs(o);
+  if ("broken" in prefs) {
+    o.log(`warning could not record the MCP choice: ${prefs.broken}`);
+    return;
+  }
+  const before = prefs.declined;
+  const after = decline ? [...new Set([...before, ...apps])] : before.filter((a) => !apps.includes(a));
+  if (after.length === before.length && after.every((a) => before.includes(a))) return;
+  try {
+    const raw = JSON.parse(readText(prefsPath(o)) ?? "{}") as Record<string, unknown>;
+    writeDeclined(o, raw, MCP_APPS.filter((a) => after.includes(a)));
+  } catch (err) {
+    o.log(`warning could not record the MCP choice in ${prefsPath(o)}: ${(err as Error).message}`);
+  }
+}
+
+const baseName = (p: unknown) => (typeof p === "string" ? (p.split(/[\\/]/).pop() ?? "") : "");
+
+// An entry an anynotate install wrote: the anynotate binary anywhere, or a source install's bun running cli.ts.
+export function isAnynotateEntry(entry: unknown): boolean {
+  if (!isObject(entry)) return false;
+  if (/^anynotate(\.exe)?$/i.test(baseName(entry.command))) return true;
+  const args: unknown[] = Array.isArray(entry.args) ? entry.args : [];
+  return /^bun(\.exe)?$/i.test(baseName(entry.command)) && args.some((a) => baseName(a) === "cli.ts");
 }
 
 function appState(app: McpApp, o: McpOptions): AppState {
@@ -292,33 +372,47 @@ function appState(app: McpApp, o: McpOptions): AppState {
   }
   if (current === undefined) return { state: "not configured", path };
   if (sameEntry(current, o.entry)) return { state: "configured", path };
-  return { state: "stale", path, command: [isObject(current) ? current.command : undefined, ...(isObject(current) && Array.isArray(current.args) ? current.args : [])].filter(Boolean).join(" ") };
+  return { state: "stale", path, custom: !isAnynotateEntry(current), command: [isObject(current) ? current.command : undefined, ...(isObject(current) && Array.isArray(current.args) ? current.args : [])].filter(Boolean).join(" ") };
 }
 
 export function mcpChecks(o: McpOptions): Check[] {
-  return MCP_APPS.map((app): Check => {
-    const name = `mcp (${app})`;
-    const s = appState(app, o);
-    switch (s.state) {
-      case "unsupported":
-        return { name, ok: true, detail: `${s.reason} (skipped)` };
-      case "app not found":
-        return { name, ok: true, detail: "app not found (skipped)" };
-      case "not configured":
-        return { name, ok: true, detail: `not configured (optional: \`anynotate mcp install --${app}\`)` };
-      case "configured":
-        return { name, ok: true, detail: `configured in ${s.path}`, mcp: "configured" };
-      case "stale":
-        return { name, ok: "warn", detail: `${s.path} runs ${s.command} — run \`anynotate mcp install --${app}\`` };
-      case "unreadable":
-        return { name, ok: "warn", detail: `${s.path} is ${s.error}` };
-    }
-  });
+  const prefs = readPrefs(o);
+  const declined = "declined" in prefs ? prefs.declined : MCP_APPS;
+  const envOff = mcpOptedOut(o.env);
+  const settings: Check[] = "broken" in prefs ? [{ name: "mcp settings", ok: "warn", detail: `${prefs.broken}; fix or delete it, then run \`anynotate install\`` }] : [];
+  return [
+    ...settings,
+    ...MCP_APPS.map((app): Check => {
+      const name = `mcp (${app})`;
+      const s = appState(app, o);
+      switch (s.state) {
+        case "unsupported":
+          return { name, ok: true, detail: `${s.reason} (skipped)` };
+        case "app not found":
+          return { name, ok: true, detail: "app not found (skipped)" };
+        case "not configured":
+          if (app === "claude-code" && !findCli("claude", o)) return { name, ok: true, detail: "claude is not on PATH (skipped)" };
+          if (envOff) return { name, ok: true, detail: `not configured (${NO_MCP_ENV} is set)`, mcp: "off" };
+          if (declined.includes(app)) return { name, ok: true, detail: `not configured (you turned it off; \`anynotate mcp install --${app}\` adds it)`, mcp: "off" };
+          return { name, ok: "warn", detail: `${LABEL[app]} is installed but not connected — run \`anynotate mcp install --${app}\``, mcp: "missing" };
+        case "configured":
+          return { name, ok: true, detail: `configured in ${s.path}`, mcp: "configured" };
+        case "stale":
+          if (s.custom) return { name, ok: true, detail: `${s.path} has your custom entry (runs ${s.command}); left alone` };
+          return { name, ok: "warn", detail: `${s.path} runs ${s.command} — run \`anynotate mcp install --${app}\`` };
+        case "unreadable":
+          return { name, ok: "warn", detail: `${s.path} is ${s.error}` };
+      }
+    }),
+  ];
 }
 
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
-type Outcome = { failed: boolean; changed: boolean };
+type Outcome = { failed: boolean; changed: boolean; manual?: true };
+
+export const CLAUDE_TIMEOUT_MS = 30_000;
+const CMD_META = /[%&|<>^!"()]/;
 
 // Owner-only from creation, and never over an existing file.
 const PRIVATE_NEW = { mode: 0o600, flag: "wx" } as const;
@@ -385,7 +479,7 @@ function runClaude(argv: string[], dryRun: boolean, o: McpOptions): Outcome {
     o.log(`would run ${shown}`);
     return { failed: false, changed: false };
   }
-  const r = o.exec(argv);
+  const r = o.exec(argv, undefined, undefined, { timeoutMs: CLAUDE_TIMEOUT_MS });
   if (r.code !== 0) {
     const why = (r.stderr || r.stdout).split(/\r?\n/).find((l) => l.trim())?.trim();
     o.log(`failed (exit ${r.code}): ${shown}${why ? `: ${why}` : ""}`);
@@ -405,13 +499,17 @@ function claudeCode(verb: "add" | "remove", s: AppState, dryRun: boolean, o: Mcp
     o.log(`ok      claude-code (anynotate not configured)`);
     return { failed: false, changed: false };
   }
-  const bin = o.which("claude");
+  const bin = findCli("claude", o);
   const remove = [bin ?? "claude", "mcp", "remove", "--scope", "user", SERVER_NAME];
   const add = [bin ?? "claude", "mcp", "add", "--scope", "user", SERVER_NAME, "--", ...o.entry, "mcp"];
   const steps = verb === "remove" ? [remove] : configured ? [remove, add] : [add];
   if (!bin) {
     for (const argv of steps) o.log(`manual  claude is not on PATH; run: ${quoteArgv(argv, o.platform)}`);
     return { failed: false, changed: false };
+  }
+  if (o.platform === "win32" && /\.(cmd|bat)$/i.test(bin) && o.entry.some((a) => CMD_META.test(a))) {
+    for (const argv of steps) o.log(`manual  ${bin} would mangle this path; run: ${quoteArgv(argv, o.platform)}`);
+    return { failed: false, changed: false, manual: true };
   }
   let changed = false;
   for (const argv of steps) {
@@ -420,6 +518,89 @@ function claudeCode(verb: "add" | "remove", s: AppState, dryRun: boolean, o: Mcp
     changed ||= r.changed;
   }
   return { failed: false, changed };
+}
+
+function applyApp(app: McpApp, action: "add" | "remove", s: AppState, dryRun: boolean, o: McpOptions): Outcome {
+  const target = mcpTarget(app, o);
+  try {
+    if (target.kind === "cli") return claudeCode(action, s, dryRun, o);
+    if (target.kind === "unsupported") return { failed: false, changed: false };
+    const edit = target.kind === "json" ? (action === "add" ? (t: string) => setJsonServer(t, o.entry) : removeJsonServer) : action === "add" ? (t: string) => setTomlServer(t, o.entry) : removeTomlServer;
+    return editFile(target.path, edit, action, dryRun, o);
+  } catch (err) {
+    o.log(`failed  ${app}: ${(err as Error).message}`);
+    return { failed: true, changed: false };
+  }
+}
+
+const listApps = (apps: McpApp[]) => apps.map((a) => LABEL[a]).join(", ");
+
+export const NO_MCP_ENV = "ANYNOTATE_NO_MCP";
+export const mcpOptedOut = (env: Env) => /^(1|true|yes)$/i.test(env[NO_MCP_ENV]?.trim() ?? "");
+
+// Connects every detected app that is not connected yet and that the user has not removed with `mcp uninstall`.
+// Claude Code counts only when its CLI is on PATH, since that is how the server is added. One app that can't be
+// written is reported and never stops the others or the install.
+export function autoMcpInstall(o: McpOptions & { dryRun?: boolean; optOut?: string; recordOptOut?: boolean }): void {
+  const dryRun = o.dryRun ?? false;
+  if (o.optOut) {
+    if (o.recordOptOut && !dryRun) {
+      const detected = MCP_APPS.filter((app) => {
+        const s = appState(app, o);
+        return s.state !== "unsupported" && s.state !== "app not found" && s.state !== "configured" && (app !== "claude-code" || findCli("claude", o) !== null);
+      });
+      if (detected.length) rememberChoice(o, detected, true);
+    }
+    o.log(`MCP: skipped (${o.optOut}); run \`anynotate mcp install\` to connect Claude Desktop, Cursor, Codex or Claude Code`);
+    return;
+  }
+  const prefs = readPrefs(o);
+  if ("broken" in prefs) {
+    o.log(`MCP: skipped — ${prefs.broken}; fix or delete it, then run \`anynotate install\``);
+    return;
+  }
+  const { declined } = prefs;
+  const added: McpApp[] = [];
+  const already: McpApp[] = [];
+  const failed: McpApp[] = [];
+  const skipped: McpApp[] = [];
+  const custom: McpApp[] = [];
+  const manual: McpApp[] = [];
+  for (const app of MCP_APPS) {
+    const s = appState(app, o);
+    if (s.state === "unsupported" || s.state === "app not found") continue;
+    if (app === "claude-code" && !findCli("claude", o)) continue;
+    if (s.state === "configured") {
+      already.push(app);
+      continue;
+    }
+    if (s.state === "stale" && s.custom) {
+      custom.push(app);
+      continue;
+    }
+    if (declined.includes(app)) {
+      skipped.push(app);
+      continue;
+    }
+    if (s.state === "unreadable") {
+      o.log(`refused ${s.path} (${s.error}; left unchanged)`);
+      failed.push(app);
+      continue;
+    }
+    const r = applyApp(app, "add", s, dryRun, o);
+    if (r.manual) manual.push(app);
+    else if (r.failed) failed.push(app);
+    else if (r.changed || dryRun) added.push(app);
+    else already.push(app);
+  }
+  const parts: string[] = [];
+  if (added.length) parts.push(dryRun ? `would add to ${listApps(added)}` : `added to ${listApps(added)} — restart ${added.length === 1 ? "it" : "them"} to load Anynotate`);
+  if (already.length) parts.push(`already in ${listApps(already)}`);
+  if (custom.length) parts.push(`left your custom entry in ${listApps(custom)}`);
+  if (manual.length) parts.push(`add ${listApps(manual)} by hand with the command above`);
+  if (failed.length) parts.push(`could not update ${listApps(failed)} (see above; fix it, then run ${failed.map((a) => `\`anynotate mcp install --${a}\``).join(", ")})`);
+  if (skipped.length) parts.push(`left out ${listApps(skipped)} (turned off; ${skipped.map((a) => `\`anynotate mcp install --${a}\``).join(", ")} adds it back)`);
+  o.log(parts.length ? `MCP: ${parts.join("; ")}` : "MCP: no desktop apps found (run `anynotate mcp install` later)");
 }
 
 function describe(verb: "install" | "uninstall", o: McpOptions): void {
@@ -471,14 +652,11 @@ export function runMcpSetup(args: string[], o: McpOptions): number {
       o.log(`skip    ${app}: app not found`);
       continue;
     }
-    if (target.kind === "cli") r = claudeCode(action, s, dryRun, o);
-    else {
-      const edit = target.kind === "json" ? (action === "add" ? (t: string) => setJsonServer(t, o.entry) : removeJsonServer) : action === "add" ? (t: string) => setTomlServer(t, o.entry) : removeTomlServer;
-      r = editFile((target as { path: string }).path, edit, action, dryRun, o);
-    }
+    r = applyApp(app, action, s, dryRun, o);
     failed ||= r.failed;
     if (r.changed) changed.push(app);
   }
+  if (!dryRun) rememberChoice(o, [...new Set(apps)], action === "remove");
   for (const app of changed) {
     if (app === "claude-code") o.log(`Start a new Claude Code session to ${action === "add" ? "load" : "drop"} it.`);
     else o.log(`Restart ${LABEL[app]} to ${action === "add" ? "load" : "drop"} the anynotate server.`);

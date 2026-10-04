@@ -121,3 +121,11 @@ test("spawnExec reports a missing binary as 127 without throwing", () => {
 test("spawnExec captures stdout", () => {
   expect(spawnExec([process.execPath, "-e", "console.log(1)"]).stdout.trim()).toBe("1");
 });
+
+test.skipIf(process.platform === "win32")("spawnExec stops a command that outlives its timeout and reports 124", () => {
+  const started = Date.now();
+  const r = spawnExec(["sleep", "5"], undefined, undefined, { timeoutMs: 200 });
+  expect(r.code).toBe(124);
+  expect(r.stderr).toContain("timed out");
+  expect(Date.now() - started).toBeLessThan(4000);
+});

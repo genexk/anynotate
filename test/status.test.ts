@@ -92,3 +92,21 @@ test("CLI status rejects unknown flags", async () => {
   expect(r.code).toBe(1);
   expect(r.err).toContain("usage: anynotate status [--notify]");
 });
+
+test("summarizeChecks tells how to connect a detected app that has no MCP entry", () => {
+  const checks: Check[] = [
+    pass("bridge"),
+    { name: "mcp (cursor)", ok: true, detail: "configured", mcp: "configured" },
+    { name: "mcp (claude-desktop)", ok: "warn", detail: "not connected", mcp: "missing" },
+    { name: "mcp (codex)", ok: "warn", detail: "not connected", mcp: "missing" },
+  ];
+  expect(summarizeChecks(checks, "0.6.3")).toEqual({
+    line: "Anynotate 0.6.3 · bridge running · 2 warnings · MCP: cursor · MCP not connected: claude-desktop, codex — run `anynotate mcp install --claude-desktop --codex`",
+    code: 0,
+  });
+});
+
+test("summarizeChecks says MCP: off when MCP was turned off and nothing is connected", () => {
+  const checks: Check[] = [pass("bridge"), { name: "mcp (cursor)", ok: true, detail: "off", mcp: "off" }];
+  expect(summarizeChecks(checks, "0.6.3").line).toBe("Anynotate 0.6.3 · bridge running · all checks passed · MCP: off");
+});

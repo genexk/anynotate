@@ -67,12 +67,13 @@
             <pre><code id="cmd-win">irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex</code></pre>
             <button class="copy" type="button" data-copy="cmd-win">Copy</button>
           </div>
+          Using Claude Desktop, Cursor or Codex? The installer connects them automatically; restart the app. To add one later, see <a href="#mcp">step 10</a>.
         </li>
         <li>Add the Anynotate extension from the <a href="https://chromewebstore.google.com/detail/lefcmfmbmjmgfkgbbcodolcecbnfjgpp" target="_blank" rel="noopener">Chrome Web Store</a>. It works in Chrome, Edge, Brave and Chromium.</li>
         <li>The extension opens a welcome page. When it says <strong>Connected</strong>, you are ready.</li>
       </ol>
       <figure class="shot narrow">
-        <a class="zoom" href="../img/guide/10-welcome.png"><img src="../img/guide/10-welcome.png" width="676" height="283" loading="lazy" alt="The Anynotate welcome page: a green dot by Connected and a three-step tour: press Alt+Shift+A, select text or pick an element, choose a session and press Send."></a>
+        <a class="zoom" href="../img/guide/10-welcome.png"><img src="../img/guide/10-welcome.png" width="676" height="335" loading="lazy" alt="The Anynotate welcome page: a green dot by Connected and a three-step tour: press Alt+Shift+A, select text or pick an element, choose a session and press Send. Below it: Using Claude Desktop, Cursor or Codex? Restart it after installing; the bridge connects it automatically."></a>
         <figcaption>The welcome page finds the bridge by itself.</figcaption>
       </figure>
       <p class="tip">Use herdr? <code>herdr plugin install genexk/anynotate/integrations/herdr</code> installs the bridge too, and adds the <a href="#inbox">inbox popup</a>.</p>
@@ -291,7 +292,7 @@
 
     <section class="guide-section" id="mcp" aria-labelledby="mcp-title">
       <h2 id="mcp-title"><span class="n" aria-hidden="true">10</span>Use with Claude Desktop, Codex or Cursor</h2>
-      <p>Apps read your notes through <code>anynotate mcp</code>, a local MCP server that never goes online. It works in Claude Desktop (chat and Cowork), Cursor, Codex and Claude Code.</p>
+      <p>Apps read your notes through <code>anynotate mcp</code>, a local MCP server that never goes online. It works in Claude Desktop (chat and Cowork), Cursor, Codex and Claude Code. The installer adds it to the apps it finds; use these steps to add one later or to check.</p>
       <ol class="howto">
         <li><strong>See which apps Anynotate finds.</strong> Nothing is changed yet.
           <div class="cmd">
@@ -309,7 +310,7 @@
         <li><strong>Send your notes to the 📥 Inbox</strong> in the extension, then ask the app to <em>read my browser notes</em>. In Claude Desktop you can also pick <strong>review-browser-notes</strong> from the <strong>+</strong> menu.</li>
         <li><strong>The app marks them done</strong> when it has acted on them, and the panel shows ✓ with its summary.</li>
       </ol>
-      <p>To remove it again, run <code>anynotate mcp uninstall</code> with the same flags.</p>
+      <p>To remove it again, run <code>anynotate mcp uninstall</code> with the same flags; installs and updates then leave that app out. To skip MCP when installing, set <code>ANYNOTATE_NO_MCP=1</code> or run <code>anynotate install --no-mcp</code>.</p>
     </section>
 
     <section class="guide-section" id="settings" aria-labelledby="settings-title">

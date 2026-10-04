@@ -129,6 +129,23 @@ test("install records the install kind and writes the service without starting i
   expect(r.out).not.toMatch(/^ran: /m);
 });
 
+test("install connects detected MCP apps and prints one MCP line; ANYNOTATE_NO_MCP and --no-mcp skip it, --no-mcp is remembered", async () => {
+  mkdirSync(join(home, ".cursor"), { recursive: true });
+  expect((await run(["install"], { ANYNOTATE_NO_MCP: "1" })).out).toContain("MCP: skipped (ANYNOTATE_NO_MCP=1)");
+  expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+  const r = await run(["install"]);
+  expect(r.code).toBe(0);
+  expect(r.out).toMatch(/^MCP: added to .*Cursor.* — restart /m);
+  expect(JSON.parse(readFileSync(join(home, ".cursor", "mcp.json"), "utf8")).mcpServers.anynotate.args.at(-1)).toBe("mcp");
+  writeFileSync(join(home, ".cursor", "mcp.json"), "{}\n");
+  const skipped = await run(["install", "--no-mcp"]);
+  expect(skipped.code).toBe(0);
+  expect(skipped.out).toContain("MCP: skipped (--no-mcp)");
+  expect(JSON.parse(readFileSync(join(home, "data", "mcp.json"), "utf8")).declined).toContain("cursor");
+  expect((await run(["install"])).out).toMatch(/^MCP: .*left out .*Cursor/m);
+  expect(readFileSync(join(home, ".cursor", "mcp.json"), "utf8")).toBe("{}\n");
+});
+
 test("uninstall --dry-run lists the removals and changes nothing", async () => {
   await run(["install"]);
   writeFileSync(join(home, "data", "token"), "secret\n");

@@ -13,7 +13,7 @@ import { mcpChecks } from "../mcp/install";
 
 // ok is false for a failed required check, "warn" for something worth fixing that doesn't stop Anynotate working.
 // skipped marks a check an external dry run did not perform; it shows as a warning and is counted separately.
-export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" };
+export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" | "missing" | "off" };
 
 export type DoctorOptions = {
   platform: Platform;

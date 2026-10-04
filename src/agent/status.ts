@@ -20,6 +20,9 @@ export function summarizeChecks(checks: Check[], version: string): { line: strin
   }
   const mcp = checks.filter((c) => c.mcp === "configured").map((c) => /^mcp \((.+)\)$/.exec(c.name)?.[1] ?? c.name);
   if (mcp.length) parts.push(`MCP: ${mcp.join(", ")}`);
+  else if (checks.some((c) => c.mcp === "off")) parts.push("MCP: off");
+  const missing = checks.filter((c) => c.mcp === "missing").map((c) => /^mcp \((.+)\)$/.exec(c.name)?.[1] ?? c.name);
+  if (missing.length) parts.push(`MCP not connected: ${missing.join(", ")} — run \`anynotate mcp install ${missing.map((a) => `--${a}`).join(" ")}\``);
   return { line: parts.join(" · "), code: failed.length ? 1 : 0 };
 }
 

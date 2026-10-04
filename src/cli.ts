@@ -30,7 +30,7 @@ import { archiveOlderThan } from "./inbox/store";
 import { Agent } from "@anynotate/protocol";
 import { createMcpServer, serveStdio } from "./mcp/server";
 import { anynotatePrompts, anynotateTools, MCP_INSTRUCTIONS } from "./mcp/tools";
-import { MCP_SETUP_USAGE, runMcpSetup } from "./mcp/install";
+import { autoMcpInstall, MCP_SETUP_USAGE, mcpOptedOut, NO_MCP_ENV, runMcpSetup } from "./mcp/install";
 
 function writeAll(data: string | Uint8Array) {
   const buf = typeof data === "string" ? Buffer.from(data) : data;
@@ -170,8 +170,8 @@ switch (cmd) {
   case "deliver":
     process.exit(await runDeliver(rest, { log: (line) => console.log(line), err: (line) => console.error(line) }));
   case "install": {
-    if (rest.some((a) => a !== "--dry-run" && a !== "--no-hints")) {
-      console.error("usage: anynotate install [--dry-run] [--no-hints]");
+    if (rest.some((a) => a !== "--dry-run" && a !== "--no-hints" && a !== "--no-mcp")) {
+      console.error("usage: anynotate install [--dry-run] [--no-hints] [--no-mcp]");
       process.exit(1);
     }
     const dry = rest.includes("--dry-run");
@@ -187,6 +187,18 @@ switch (cmd) {
     });
     const log = applyInstall(steps, dry, { exec, platform, externalDryRun });
     for (const line of log) console.log(line);
+    autoMcpInstall({
+      platform,
+      home: homedir(),
+      env: process.env,
+      entry: commandArgv(detectInstallKind()),
+      which: (c) => Bun.which(c),
+      exec,
+      log: (line) => console.log(line),
+      dryRun: dry,
+      recordOptOut: rest.includes("--no-mcp"),
+      optOut: rest.includes("--no-mcp") ? "--no-mcp" : mcpOptedOut(process.env) ? `${NO_MCP_ENV}=${process.env[NO_MCP_ENV]!.trim()}` : undefined,
+    });
     if (log.some((l) => l.startsWith("failed ("))) {
       console.error("anynotate install: some steps failed (see above)");
       process.exit(1);
@@ -352,6 +364,6 @@ switch (cmd) {
     process.exit(1);
   }
   default:
-    console.log("usage: anynotate <--version|bridge [--ensure|--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|deliver <id|latest> --pane <pane-id> [--dry-run]|inbox [--select <id|latest>] [--plain]|mcp [install|uninstall [--<app>] [--dry-run]]|token|install [--dry-run] [--no-hints]|doctor|status [--notify]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
+    console.log("usage: anynotate <--version|bridge [--ensure|--detach|--stop|--status]|hook --agent <name>|annotations [id|latest]|deliver <id|latest> --pane <pane-id> [--dry-run]|inbox [--select <id|latest>] [--plain]|mcp [install|uninstall [--<app>] [--dry-run]]|token|install [--dry-run] [--no-hints] [--no-mcp]|doctor|status [--notify]|uninstall [--purge] [--dry-run]|update [--dry-run]|native-host <origin>|origin <add <o>|list|remove <o>>|retention [<days>|off]|prune [--dry-run]>");
     process.exit(cmd ? 1 : 0);
 }

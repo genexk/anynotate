@@ -33,6 +33,8 @@ irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | i
 
 The installer downloads the release binary for your machine (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64` or `windows-x64`), checks it against the release's `SHA256SUMS`, puts it in place and runs `anynotate install`. It needs no root or administrator rights. Set `ANYNOTATE_VERSION=0.4.0` to pin a release, or `ANYNOTATE_BIN_DIR` to install elsewhere.
 
+Using Claude Desktop, Cursor or Codex? The installer connects them automatically; restart the app. To add one later: `anynotate mcp install --claude-desktop` (or `--cursor`, `--codex`, `--claude-code`).
+
 `anynotate install` (re-run it any time; it also restarts the bridge) writes:
 
 | | macOS | Linux | Windows |
@@ -99,7 +101,7 @@ The prompt hooks for Claude Code and Codex are an optional extra: they inject bu
 
 ### Desktop apps (MCP)
 
-Apps without hooks or a terminal, such as Claude Desktop (chat and Cowork), the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. Set it up per app; `install` does not do this for you:
+Apps without hooks or a terminal, such as Claude Desktop (chat and Cowork), the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. `install` (and so `update`) adds it to every app it finds: Claude Desktop, Cursor, Codex, and Claude Code when `claude` is on `PATH`. It ends with one `MCP:` line naming them. `ANYNOTATE_NO_MCP=1` skips this. `--no-mcp`, or `anynotate mcp uninstall --<app>` for one app, also keeps it skipped on later installs and updates (recorded in `~/.anynotate/mcp.json`) until you `mcp install` it again. An `anynotate` entry you pointed at your own command is left alone. By hand:
 
 ```bash
 anynotate mcp install                                  # list the apps found and what each flag would change
@@ -114,7 +116,7 @@ anynotate mcp uninstall --cursor                       # remove the entry again
 | `--codex` | a `[mcp_servers.anynotate]` table in `~/.codex/config.toml` (Codex CLI and app) |
 | `--claude-code` | runs `claude mcp add --scope user anynotate -- <anynotate> mcp`, or prints it when `claude` is not on `PATH` |
 
-Each entry runs this `anynotate` binary by its absolute path with the argument `mcp`. Only that entry's `command` and `args` are set; everything else in the file, including other keys you add to the entry, is kept, a timestamped `.bak-anynotate-…` copy is written first, and a file that doesn't parse is left alone. Restart the app afterwards. `anynotate doctor` shows an `mcp (<app>)` line per app.
+Each entry runs this `anynotate` binary by its absolute path with the argument `mcp`. Only that entry's `command` and `args` are set; everything else in the file, including other keys you add to the entry, is kept, a timestamped `.bak-anynotate-…` copy is written first, and a file that doesn't parse is left alone. Restart the app afterwards. `anynotate doctor` shows an `mcp (<app>)` line per app and, like `anynotate status`, names the command for an app it finds that is not connected.
 
 The server offers four tools and one prompt (`review-browser-notes`, in Claude Desktop's "+" menu):
 

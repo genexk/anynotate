@@ -10,6 +10,7 @@
 #   ANYNOTATE_VERSION   install this release (e.g. 0.4.0) instead of the latest
 #   ANYNOTATE_BASE_URL  download from this base URL instead (file:// works)
 #   ANYNOTATE_BIN_DIR   install into this directory instead
+#   ANYNOTATE_NO_MCP    set to 1 to leave Claude Desktop, Cursor, Codex and Claude Code unconfigured
 #
 # Everything runs from Install-Anynotate, called on the last line, so a
 # truncated download never executes a partial script.
@@ -75,7 +76,7 @@ function Install-Anynotate {
   Write-Host "  verify:    against $base/SHA256SUMS"
   Write-Host "  install:   $exe"
   Write-Host "  PATH:      add $binDir to your user PATH if missing"
-  Write-Host "  then run:  $exe install (sets up the bridge service and browser hosts)"
+  Write-Host "  then run:  $exe install (sets up the bridge service, browser hosts and MCP for the apps it finds)"
   Write-Host ''
 
   $download = {

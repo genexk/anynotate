@@ -11,6 +11,7 @@
 #   ANYNOTATE_VERSION   install this release (e.g. 0.4.0) instead of the latest
 #   ANYNOTATE_BASE_URL  download from this base URL instead (file:// works)
 #   ANYNOTATE_BIN_DIR   install into this directory instead of ~/.local/bin
+#   ANYNOTATE_NO_MCP    set to 1 to leave Claude Desktop, Cursor, Codex and Claude Code unconfigured
 #
 # Everything runs from main(), called on the last line, so a truncated
 # download never executes a partial script.
@@ -151,7 +152,7 @@ main() {
   say "  download:  $base/$asset"
   say "  verify:    against $base/SHA256SUMS"
   say "  install:   $bin"
-  say "  then run:  $bin install (sets up the bridge service and browser hosts)"
+  say "  then run:  $bin install (sets up the bridge service, browser hosts and MCP for the apps it finds)"
   say ""
 
   staged=""
