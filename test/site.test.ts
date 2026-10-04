@@ -71,7 +71,7 @@ describe.each(PAGES)("site/%s", (page) => {
   });
 
   test("uses the current stylesheet version", () => {
-    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=5"/);
+    expect(html()).toMatch(/href="(?:\.\.\/)?style\.css\?v=6"/);
   });
 
   test("holds no personal paths or addresses", () => {
