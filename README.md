@@ -99,6 +99,10 @@ An agent needs no Anynotate-specific setup to receive notes:
 
 The prompt hooks for Claude Code and Codex are an optional extra: they inject bundles queued for a session on its next prompt. Those sessions share the Sessions list with herdr panes, marked ⏳; one in the Claude desktop app shows `Claude app` as its folder.
 
+### Keyboard shortcuts
+
+Defaults: `Alt+Shift+A` toggles annotate mode, `Alt+Shift+E` picks an element, `Alt+Shift+S` sends (`⌥⇧A`, `⌥⇧E`, `⌥⇧S` on a Mac). Chrome leaves a shortcut unset when another extension or program already uses it; set or change them at `chrome://extensions/shortcuts` (`edge://extensions/shortcuts` in Edge). Clicking the toolbar icon always works. More in [Support](https://genexk.github.io/anynotate/support/#shortcuts).
+
 ### Desktop apps (MCP)
 
 Apps without hooks or a terminal, such as Claude Desktop (chat and Cowork), the Codex app and Cursor, read notes through `anynotate mcp`, a local MCP server that runs over stdio and never touches the network. `install` (and so `update`) adds it to every app it finds: Claude Desktop, Cursor, Codex, and Claude Code when `claude` is on `PATH`. It ends with one `MCP:` line naming them. `ANYNOTATE_NO_MCP=1` skips this. `--no-mcp`, or `anynotate mcp uninstall --<app>` for one app, also keeps it skipped on later installs and updates (recorded in `~/.anynotate/mcp.json`) until you `mcp install` it again. An `anynotate` entry you pointed at your own command is left alone. By hand:

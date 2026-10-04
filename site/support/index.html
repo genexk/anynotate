@@ -55,6 +55,7 @@
           <li><a href="#helper">Cannot reach the helper</a></li>
           <li><a href="#not-found">Command not found</a></li>
           <li><a href="#not-received">My agent did not receive the notes</a></li>
+          <li><a href="#shortcuts">A keyboard shortcut does nothing</a></li>
           <li><a href="#herdr">herdr plugin</a></li>
           <li><a href="#stuck">Still stuck?</a></li>
         </ol>
@@ -101,6 +102,18 @@ anynotate install</code></pre>
         <div class="problem" id="not-received">
           <h3>My agent did not receive the notes</h3>
           <p>For Claude Code and Codex, notes sent to a session arrive with your next prompt in that session. In a herdr pane they are typed in once the agent is idle. Any other agent can read the newest notes with <code>anynotate annotations latest</code> or from <code>~/.anynotate/inbox/latest/README.md</code>. <code>anynotate annotations</code> lists the recent ones.</p>
+        </div>
+
+        <div class="problem" id="shortcuts">
+          <h3>A keyboard shortcut does nothing</h3>
+          <p>Chrome skips a shortcut at install time when another extension or program already uses it, so it can end up unset.</p>
+          <ol>
+            <li>Open <code>chrome://extensions/shortcuts</code> (in Edge: <code>edge://extensions/shortcuts</code>) and find Anynotate.</li>
+            <li>If <strong>Toggle annotate mode</strong>, <strong>Pick an element</strong> or <strong>Send</strong> is empty, click its pencil and press the keys you want. The defaults are <kbd>Alt+Shift+A</kbd>, <kbd>Alt+Shift+E</kbd> and <kbd>Alt+Shift+S</kbd> (<kbd>⌥⇧A</kbd>, <kbd>⌥⇧E</kbd>, <kbd>⌥⇧S</kbd> on a Mac).</li>
+            <li>If Chrome says the keys are taken, it names the extension using them: change that one, or pick other keys such as <kbd>Ctrl+Shift+Y</kbd>.</li>
+            <li>If a shortcut is set but still does nothing, a program outside Chrome is catching it (screen recorders, overlays and some keyboard tools do). Choose different keys.</li>
+          </ol>
+          <p>Clicking the Anynotate icon in the toolbar always turns annotate mode on, with or without a shortcut.</p>
         </div>
       </section>
 
