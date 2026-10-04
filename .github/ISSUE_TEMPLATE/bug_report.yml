@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in Anynotate doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove anything private (paths, page content, tokens) from what you paste below. Security problems go through [SECURITY.md](https://github.com/genexk/anynotate/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      description: Windows and Linux are in beta, so reports from them are especially useful.
+      placeholder: macOS 15.4, Windows 11 24H2, Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `anynotate doctor`
+      render: text
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      description: From chrome://extensions.
+      placeholder: "0.3.1"

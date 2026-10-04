@@ -404,8 +404,10 @@ kbd.sym { font-family: var(--sans); font-size: 0.95em; }
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1.4;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  vertical-align: 0.1em;
   background: var(--mark);
   color: var(--on-mark);
 }

@@ -1,6 +1,6 @@
 # Anynotate for herdr
 
-A [herdr](https://herdr.dev) plugin (herdr 0.9.0 or newer, on macOS and Linux) that brings your Anynotate browser notes into herdr: an inbox popup, a one-key "send the latest note to this agent", a status check, and Ctrl-click on a bundle's `README.md` path to open it in the inbox.
+A [herdr](https://herdr.dev) plugin (herdr 0.9.0 or newer; macOS, Linux in beta) that brings your Anynotate browser notes into herdr: an inbox popup, a one-key "send the latest note to this agent", a status check, and Ctrl-click on a bundle's `README.md` path to open it in the inbox.
 
 ## Install
 

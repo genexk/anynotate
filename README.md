@@ -15,17 +15,17 @@ This repository holds the agent side: the local bridge, the `anynotate` CLI, the
 - **Frames:** same-site frames work like the page. Frames from other sites are picked whole until you press **Allow** for that site (one Allow covers every claude.ai artifact); allowed sites are removable in the extension's Options under "Frames from other sites". Payment frames are never entered.
 - **Targets:** one Sessions list of herdr panes (typed in now) and Claude Code or Codex sessions outside herdr (⏳, arrives with your next message), labelled `workspace · agent · folder · title` with the session's real title (`Claude app` as the folder for a Claude Code session in the Claude desktop app), plus one 📥 Inbox any agent reads. A hint line under the picker says how the chosen target gets the notes.
 - **Privacy:** password, payment-card and one-time-code fields are covered in screenshots and blanked in captured text, including inside allowed frames. The panel sits in a closed shadow root the page can't read. Pages the extension can't run on (browser pages, the Chrome Web Store, PDFs) say why.
-- **Browsers and platforms:** Chrome, Edge, Brave and Chromium; bridge, installers, `update`, `uninstall`, `doctor` and `status` on macOS, Linux and Windows.
+- **Browsers and platforms:** Chrome, Edge, Brave and Chromium; bridge, installers, `update`, `uninstall`, `doctor` and `status` on macOS, plus Linux and Windows in beta.
 
 ## Install
 
-macOS and Linux:
+macOS, or Linux (beta):
 
 ```bash
 curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh
 ```
 
-Windows (PowerShell 5.1 or later):
+Windows (beta; PowerShell 5.1 or later):
 
 ```powershell
 irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | iex
@@ -37,7 +37,7 @@ Using Claude Desktop, Cursor or Codex? The installer connects them automatically
 
 `anynotate install` (re-run it any time; it also restarts the bridge) writes:
 
-| | macOS | Linux | Windows |
+| | macOS | Linux (beta) | Windows (beta) |
 |---|---|---|---|
 | Binary | `~/.local/bin/anynotate` | `~/.local/bin/anynotate` | `%LOCALAPPDATA%\anynotate\bin\anynotate.exe`, added to the user `PATH` |
 | Bridge service | launchd agent `~/Library/LaunchAgents/dev.anynotate.bridge.plist` | systemd user unit `~/.config/systemd/user/anynotate-bridge.service`; without user systemd, `~/.config/autostart/anynotate-bridge.desktop` running `anynotate bridge --detach` | `HKCU\…\CurrentVersion\Run` value `Anynotate Bridge` starting `~\.anynotate\bridge.vbs`, which runs `anynotate bridge --detach` |
@@ -137,7 +137,7 @@ Send notes to the 📥 Inbox in the extension, then ask the app to read your bro
 herdr plugin install genexk/anynotate/integrations/herdr   # herdr 0.9.0 or later; installs Anynotate too if needed
 ```
 
-On macOS and Linux (Windows support for the plugin is coming), it adds an inbox popup (`anynotate inbox`), an action that sends the latest notes to the focused agent pane, a status check shown as a herdr notification, and Ctrl-click on a bundle's `README.md` path in any pane to open it in the inbox. It also starts the bridge with the herdr server. The plugin binds no keys; add these to `~/.config/herdr/config.toml`:
+On macOS (Linux in beta; not on Windows yet), it adds an inbox popup (`anynotate inbox`), an action that sends the latest notes to the focused agent pane, a status check shown as a herdr notification, and Ctrl-click on a bundle's `README.md` path in any pane to open it in the inbox. It also starts the bridge with the herdr server. The plugin binds no keys; add these to `~/.config/herdr/config.toml`:
 
 ```toml
 [[keys.command]]
@@ -205,6 +205,10 @@ curl -s -H "X-Anynotate-Token: $(anynotate token)" \
 ```
 
 Drop `pane` and set `cwd` to an open Claude session's directory instead (`.target={agent:"claude",cwd:"/path/to/repo"}`) to exercise the hook path: the bundle is queued and injected on that session's next prompt.
+
+## Feedback
+
+Bugs and feature requests go to GitHub Issues: [report a bug](https://github.com/genexk/anynotate/issues/new?template=bug_report.yml) or [request a feature](https://github.com/genexk/anynotate/issues/new?template=feature_request.yml). Reports from Windows and Linux are especially welcome while they're in beta. Security problems: see [SECURITY.md](./SECURITY.md).
 
 ## License
 

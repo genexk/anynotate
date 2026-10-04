@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0d0b17">
 <link rel="icon" type="image/png" href="img/icon.png">
 <link rel="apple-touch-icon" href="img/icon.png">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="aurora.js?v=5" defer></script>
 </head>
 <body>
@@ -116,8 +116,8 @@
           <p class="muted">Paste one line into a terminal. It checks the download, starts the bridge in the background and connects your agents.</p>
           <div class="tabs">
             <div role="tablist" aria-label="Operating system" hidden>
-              <button type="button" role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true">macOS / Linux</button>
-              <button type="button" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1">Windows</button>
+              <button type="button" role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true">macOS / Linux <span class="badge">Beta</span></button>
+              <button type="button" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1">Windows <span class="badge">Beta</span></button>
             </div>
             <div class="cmd" role="tabpanel" id="panel-unix" aria-label="macOS and Linux">
               <pre><code id="cmd-unix">curl -fsSL https://github.com/genexk/anynotate/releases/latest/download/install.sh | sh</code></pre>
@@ -144,7 +144,7 @@
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M12 3v18M12 12h10"/><path d="m5 9 2 2-2 2"/></svg></span>
         <div>
           <h3>Works great with herdr</h3>
-          <p class="muted">Run your agents in herdr? Add the Anynotate plugin (herdr 0.9.0 or later, macOS and Linux; Windows support for the plugin is coming). It installs the bridge too if you skipped step 1.</p>
+          <p class="muted">Run your agents in herdr? Add the Anynotate plugin (herdr 0.9.0 or later; macOS, Linux <span class="badge">Beta</span>; not on Windows yet). It installs the bridge too if you skipped step 1.</p>
           <div class="cmd">
             <pre><code id="cmd-herdr">herdr plugin install genexk/anynotate/integrations/herdr</code></pre>
             <button class="copy" type="button" data-copy="cmd-herdr">Copy</button>
@@ -258,11 +258,11 @@
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
-          <div><h3>Every desktop</h3><p>Installers and a background service on macOS, Linux and Windows; Chrome, Edge, Brave and Chromium.</p></div>
+          <div><h3>Every desktop</h3><p>Chrome, Edge, Brave and Chromium. Installers and a background service on macOS, plus Linux and Windows <span class="badge">Beta</span></p></div>
         </li>
         <li class="feature">
           <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></span>
-          <div><h3>Open source</h3><p>The bridge, CLI and protocol are on GitHub for anyone to read.</p></div>
+          <div><h3>Open source</h3><p>The bridge, CLI and protocol are on GitHub for anyone to read. Bugs or ideas? <a href="https://github.com/genexk/anynotate/issues">Open an issue on GitHub</a>.</p></div>
         </li>
       </ul>
     </div>
@@ -323,6 +323,7 @@
       <a href="support/">Support</a>
       <a href="privacy/">Privacy</a>
       <a href="https://github.com/genexk/anynotate/blob/main/LICENSE">License</a>
+      <span><a href="https://github.com/genexk/anynotate/issues/new?template=bug_report.yml">Report a bug</a> · <a href="https://github.com/genexk/anynotate/issues/new?template=feature_request.yml">Request a feature</a></span>
       <a href="https://buymeacoffee.com/genexk" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
     </nav>
     <p>Open source: AGPL-3.0, with the protocol package under Apache-2.0.</p>
