@@ -22,7 +22,7 @@ type Opts = {
   listPanes?: () => Promise<Pane[]>;
   routeWaitMs?: number;
   sessionTitle?: (q: TitleQuery) => string;
-  recordExtension?: (sender: string) => void;
+  recordExtension?: (sender: string, origin: string) => void;
 };
 
 function sameToken(given: string | null, token: string): boolean {
@@ -84,7 +84,7 @@ export function createBridge(opts: Opts) {
       // An extension's request carries its Origin; one without the version header comes from a release before it.
       const extensionHeader = req.headers.get(EXTENSION_HEADER);
       const sender = extensionHeader !== null || origin ? senderFromHeader(extensionHeader) : undefined;
-      if (sender) recordExtension(sender);
+      if (sender && origin) recordExtension(sender, origin);
       try {
         if ((req.method === "GET" || req.method === "POST") && url.pathname === "/sessions") {
           const push = registry.live();

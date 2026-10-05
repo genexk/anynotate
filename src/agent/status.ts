@@ -1,4 +1,4 @@
-import { EXPECTED_EXTENSION, EXTENSION_UPDATE_HINT, UNKNOWN_EXTENSION } from "../bridge/extension-version";
+import { EXPECTED_EXTENSION, UNKNOWN_EXTENSION } from "../bridge/extension-version";
 import type { Check } from "./doctor";
 
 export const STATUS_USAGE = "usage: anynotate status [--notify]";
@@ -19,11 +19,9 @@ export function summarizeChecks(checks: Check[], version: string): { line: strin
     const counts = [warnings ? plural(warnings, "warning") : "", skipped ? `${skipped} skipped` : ""].filter(Boolean);
     parts.push(counts.length ? counts.join(", ") : "all checks passed");
   }
-  const ext = checks.find((c) => c.extension);
-  if (ext) {
-    const v = ext.extension === UNKNOWN_EXTENSION ? `older than ${EXPECTED_EXTENSION}` : ext.extension;
-    parts.push(ext.ok === true ? `Extension ${v} ✓` : `Extension ${v} ⚠ — ${EXTENSION_UPDATE_HINT}`);
-  }
+  const exts = new Set(checks.filter((c) => c.extension).map((c) =>
+    `${c.extension === UNKNOWN_EXTENSION ? `older than ${EXPECTED_EXTENSION}` : c.extension} ${c.ok === true ? "✓" : "⚠"}`));
+  if (exts.size) parts.push(`Extensions: ${[...exts].join(", ")}`);
   const mcp = checks.filter((c) => c.mcp === "configured").map((c) => /^mcp \((.+)\)$/.exec(c.name)?.[1] ?? c.name);
   if (mcp.length) parts.push(`MCP: ${mcp.join(", ")}`);
   else if (checks.some((c) => c.mcp === "off")) parts.push("MCP: off");

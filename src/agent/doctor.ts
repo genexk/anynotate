@@ -10,11 +10,11 @@ import { LAUNCHD_LABEL, planService, SYSTEMD_UNIT, WINDOWS_TASK } from "../platf
 import { HOOKED_CLIS, isAnynotateHook } from "./install";
 import { INSTALL_RECORD, type InstallRecord } from "./installkind";
 import { mcpChecks } from "../mcp/install";
-import { EXPECTED_EXTENSION, EXTENSION_FILE, EXTENSION_UPDATE_HINT, extensionIsOlder, parseSender, UNKNOWN_EXTENSION } from "../bridge/extension-version";
+import { EXPECTED_EXTENSION, EXTENSION_UPDATE_HINT, EXTENSIONS_FILE, extensionIsOlder, extensionLabel, parseExtensions, UNKNOWN_EXTENSION } from "../bridge/extension-version";
 
 // ok is false for a failed required check, "warn" for something worth fixing that doesn't stop Anynotate working.
 // skipped marks a check an external dry run did not perform; it shows as a warning and is counted separately.
-// extension is the version the bridge last saw an extension report (UNKNOWN_EXTENSION for one too old to say).
+// extension is the version one extension reported to the bridge (UNKNOWN_EXTENSION for one too old to say); doctor has one such check per extension seen.
 export type Check = { name: string; ok: boolean | "warn"; detail: string; skipped?: true; mcp?: "configured" | "missing" | "off"; extension?: string };
 
 export type DoctorOptions = {
@@ -37,6 +37,7 @@ export type DoctorOptions = {
   externalDryRun?: boolean;
   // The anynotate command line apps should run as their MCP server; without it the MCP checks are left out.
   mcpEntry?: string[];
+  now?: () => Date;
 };
 
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -51,6 +52,14 @@ const why = (r: { code: number; stderr: string }) => {
   return ` (exit ${r.code}${line ? `: ${line}` : ""})`;
 };
 const skipped = (name: string, detail: string): Check => ({ name, ok: "warn", detail, skipped: true });
+
+function ago(ms: number): string {
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
+}
 
 const executable = (path: string) => {
   try {
@@ -224,13 +233,18 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     return { name, ok: true, detail: `${commands[0]} in ${file}` };
   };
 
-  const extension = (): Check => {
+  const extensions = (): Check[] => {
     const name = "extension";
-    const seen = parseSender(read(path.join(dataDir, EXTENSION_FILE)));
-    if (!seen) return { name, ok: true, detail: "none has connected to the bridge yet" };
-    if (!extensionIsOlder(seen)) return { name, ok: true, detail: `${seen} last seen`, extension: seen };
-    const what = seen === UNKNOWN_EXTENSION ? "an older extension (no version reported)" : seen;
-    return { name, ok: "warn", detail: `${what} last seen; ${EXPECTED_EXTENSION} or later is expected — ${EXTENSION_UPDATE_HINT}`, extension: seen };
+    const now = (o.now ?? (() => new Date()))();
+    const seen = parseExtensions(read(path.join(dataDir, EXTENSIONS_FILE)), now);
+    if (!seen.length) return [{ name, ok: true, detail: "no extension seen yet" }];
+    return seen.map((e) => {
+      const what = e.version === UNKNOWN_EXTENSION ? "version not reported" : e.version;
+      const detail = `${what} (${extensionLabel(e.origin)}) · seen ${ago(now.getTime() - Date.parse(e.lastSeen))}`;
+      return extensionIsOlder(e.version)
+        ? { name, ok: "warn", detail: `${detail} — ${EXPECTED_EXTENSION} or later is expected; ${EXTENSION_UPDATE_HINT}`, extension: e.version }
+        : { name, ok: true, detail, extension: e.version };
+    });
   };
 
   const retention = (): Check => {
@@ -245,7 +259,7 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     service(),
     await bridge(),
     token(),
-    extension(),
+    ...extensions(),
     ...present.map(nativeHost),
     ...HOOKED_CLIS.map(({ cli, settings }) => hooks(cli, settings)),
     ...(o.mcpEntry ? mcpChecks({ platform, home, env, entry: o.mcpEntry, which, exec, log: () => {}, exists, readFile }) : []),

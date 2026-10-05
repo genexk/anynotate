@@ -125,7 +125,7 @@ const tolerate = (argv: string[], r: ExecResult) => tolerateNotRunning(argv, r) 
 // Everything anynotate itself writes at the top of its data dir.
 export const DATA_DIR_ENTRIES: ReadonlySet<string> = new Set([
   "token", "origins", "settings.json", INSTALL_RECORD, "bridge.log", "bridge.pid", "bridge.vbs",
-  "native-host", "native-host.cmd", "dev.anynotate.host.json", "inbox", "archive", "sessions",
+  "native-host", "native-host.cmd", "dev.anynotate.host.json", "inbox", "archive", "sessions", "extensions.json", "extension-version",
 ]);
 
 // Temp files a write left behind on a crash, backups install made of a file it replaced, and Finder metadata.

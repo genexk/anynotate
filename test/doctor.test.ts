@@ -330,23 +330,36 @@ test("the summary lists only the non-zero counts", () => {
   expect(formatChecks([c("warn"), c("warn", true)]).code).toBe(0);
 });
 
-test("the extension check shows the last extension version the bridge saw", async () => {
+test("the extension check lists every extension seen in the last 14 days", async () => {
   const f = linuxFake();
-  const ext = (checks: Check[]) => byName(checks, "extension")!;
-  expect(ext(await runDoctor(options(f)))).toEqual({ name: "extension", ok: true, detail: "none has connected to the bridge yet" });
-  f.files["/home/me/.anynotate/extension-version"] = "0.3.1\n";
-  expect(ext(await runDoctor(options(f)))).toEqual({ name: "extension", ok: true, detail: "0.3.1 last seen", extension: "0.3.1" });
-  f.files["/home/me/.anynotate/extension-version"] = "0.10.0\n";
-  expect(ext(await runDoctor(options(f))).ok).toBe(true);
-  f.files["/home/me/.anynotate/extension-version"] = "0.2.0\n";
-  const old = ext(await runDoctor(options(f)));
-  expect(old).toEqual({
-    name: "extension", ok: "warn", extension: "0.2.0",
-    detail: "0.2.0 last seen; 0.3.1 or later is expected — update it in chrome://extensions, or wait for the Chrome Web Store auto-update",
-  });
-  expect(formatChecks([old]).text.split("\n")[0]).toBe(`! extension  ${old.detail}`);
-  f.files["/home/me/.anynotate/extension-version"] = "unknown\n";
-  expect(ext(await runDoctor(options(f))).detail).toStartWith("an older extension (no version reported) last seen; 0.3.1 or later is expected");
-  f.files["/home/me/.anynotate/extension-version"] = "<script>\n";
-  expect(ext(await runDoctor(options(f))).detail).toBe("none has connected to the bridge yet");
+  const now = Date.parse("2026-10-01T12:00:00.000Z");
+  const at = (ms: number) => new Date(now - ms).toISOString();
+  const opts = { ...options(f), now: () => new Date(now) };
+  const exts = (checks: Check[]) => checks.filter((c) => c.name === "extension");
+  expect(exts(await runDoctor(opts))).toEqual([{ name: "extension", ok: true, detail: "no extension seen yet" }]);
+  f.files["/home/me/.anynotate/extensions.json"] = JSON.stringify({ extensions: [
+    { origin: "chrome-extension://lefcmfmbmjmgfkgbbcodolcecbnfjgpp", version: "0.3.1", lastSeen: at(2 * 60_000) },
+    { origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop", version: "0.2.0", lastSeen: at(3 * 3_600_000) },
+    { origin: "chrome-extension://epdjidoapjkdefnpaibacfepphipdioh", version: "unknown", lastSeen: at(2 * 86_400_000) },
+    { origin: "chrome-extension://epdjidoapjkdefnpaibacfepphipdioh", version: "0.1.0", lastSeen: at(15 * 86_400_000) },
+  ] });
+  const checks = exts(await runDoctor(opts));
+  expect(checks).toEqual([
+    { name: "extension", ok: true, extension: "0.3.1", detail: "0.3.1 (Chrome Web Store) · seen 2 min ago" },
+    {
+      name: "extension", ok: "warn", extension: "0.2.0",
+      detail: "0.2.0 (unpacked build abcd…) · seen 3 h ago — 0.3.1 or later is expected; update it in chrome://extensions or wait for the store update",
+    },
+    {
+      name: "extension", ok: "warn", extension: "unknown",
+      detail: "version not reported (dev build) · seen 2 d ago — 0.3.1 or later is expected; update it in chrome://extensions or wait for the store update",
+    },
+  ]);
+  expect(formatChecks(checks).text.split("\n").slice(0, 2)).toEqual([
+    "✓ extension  0.3.1 (Chrome Web Store) · seen 2 min ago",
+    "! extension  0.2.0 (unpacked build abcd…) · seen 3 h ago — 0.3.1 or later is expected; update it in chrome://extensions or wait for the store update",
+  ]);
+  expect(formatChecks(checks).code).toBe(0);
+  f.files["/home/me/.anynotate/extensions.json"] = "{not json";
+  expect(exts(await runDoctor(opts))).toEqual([{ name: "extension", ok: true, detail: "no extension seen yet" }]);
 });

@@ -111,12 +111,13 @@ test("summarizeChecks says MCP: off when MCP was turned off and nothing is conne
   expect(summarizeChecks(checks, "0.6.3").line).toBe("Anynotate 0.6.3 · bridge running · all checks passed · MCP: off");
 });
 
-test("summarizeChecks shows the last extension seen with ✓, or ⚠ and how to update it", () => {
+test("summarizeChecks lists each extension version seen with ✓ or ⚠", () => {
   const ext = (ok: Check["ok"], extension: string): Check => ({ name: "extension", ok, detail: "", extension });
-  expect(summarizeChecks([pass("bridge"), ext(true, "0.3.1")], "0.6.4").line).toBe("Anynotate 0.6.4 · bridge running · all checks passed · Extension 0.3.1 ✓");
-  expect(summarizeChecks([pass("bridge"), ext("warn", "0.2.0")], "0.6.4").line).toBe(
-    "Anynotate 0.6.4 · bridge running · 1 warning · Extension 0.2.0 ⚠ — update it in chrome://extensions, or wait for the Chrome Web Store auto-update",
+  expect(summarizeChecks([pass("bridge"), ext(true, "0.3.1")], "0.6.5").line).toBe("Anynotate 0.6.5 · bridge running · all checks passed · Extensions: 0.3.1 ✓");
+  expect(summarizeChecks([pass("bridge"), ext(true, "0.3.1"), ext("warn", "0.2.0")], "0.6.5").line).toBe(
+    "Anynotate 0.6.5 · bridge running · 1 warning · Extensions: 0.3.1 ✓, 0.2.0 ⚠",
   );
-  expect(summarizeChecks([pass("bridge"), ext("warn", "unknown")], "0.6.4").line).toContain("Extension older than 0.3.1 ⚠ — update it in chrome://extensions");
-  expect(summarizeChecks([pass("bridge"), { name: "extension", ok: true, detail: "none has connected to the bridge yet" }], "0.6.4").line).toBe("Anynotate 0.6.4 · bridge running · all checks passed");
+  expect(summarizeChecks([pass("bridge"), ext(true, "0.3.1"), ext(true, "0.3.1")], "0.6.5").line).toEndWith("Extensions: 0.3.1 ✓");
+  expect(summarizeChecks([pass("bridge"), ext("warn", "unknown")], "0.6.5").line).toEndWith("Extensions: older than 0.3.1 ⚠");
+  expect(summarizeChecks([pass("bridge"), { name: "extension", ok: true, detail: "no extension seen yet" }], "0.6.5").line).toBe("Anynotate 0.6.5 · bridge running · all checks passed");
 });
