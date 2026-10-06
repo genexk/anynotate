@@ -1034,3 +1034,6 @@ td:first-child { white-space: nowrap; }
   .btn-ghost::before,
   .tabs [role="tab"][aria-selected="true"]::before { display: none; }
 }
+
+.video-frame { padding: 0; overflow: hidden; }
+.video-frame video { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 1920 / 856; background: #0d0b17; }

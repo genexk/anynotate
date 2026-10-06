@@ -58,6 +58,14 @@ irm https://github.com/genexk/anynotate/releases/latest/download/install.ps1 | i
 > [!TIP]
 > Using Claude Desktop, Cursor or Codex? The installer connects them automatically; restart the app. To add one later: `anynotate mcp install --claude-desktop` (or `--cursor`, `--codex`, `--claude-code`).
 
+## 🎬 See it in action
+
+<p align="center">
+  <img src="docs/readme/demo.gif" alt="Three notes on a recipe page are sent to a Claude Code session, which edits the page to fix them" width="100%">
+</p>
+
+The same clip as a video: [genexk.github.io/anynotate/#demo](https://genexk.github.io/anynotate/#demo).
+
 ## 📸 See it
 
 | | |
