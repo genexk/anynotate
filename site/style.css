@@ -462,6 +462,58 @@ h1 .hl { font-size: 1.12em; }
   border-radius: 50%;
 }
 
+.hl-flap { padding: 0; white-space: nowrap; }
+.hl-flap::before { z-index: 3; }
+.flap-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.flapboard { display: inline-flex; gap: 0.05em; vertical-align: -0.12em; }
+.flap {
+  position: relative;
+  display: inline-block;
+  width: 0.62em;
+  height: 1.08em;
+  font-size: 0.86em;
+  perspective: 2.4em;
+  border-radius: 0.09em;
+  box-shadow: 0 0.06em 0.14em rgb(0 0 0 / 55%), inset 0 0 0 1px rgb(255 255 255 / 8%);
+}
+.flap > span {
+  position: absolute;
+  inset: 0;
+  line-height: 0.98em;
+  text-align: center;
+  border-radius: inherit;
+  backface-visibility: hidden;
+}
+.flap-top, .flap-fold {
+  clip-path: inset(0 0 50% 0);
+  background: linear-gradient(180deg, #30264a, #251d3a 50%);
+}
+.flap-bottom, .flap-unfold {
+  clip-path: inset(50% 0 0 0);
+  background: linear-gradient(180deg, #1c152e 50%, #221a36);
+}
+.flap::after {
+  content: "";
+  position: absolute;
+  inset: calc(50% - 0.5px) 0 auto;
+  height: 1px;
+  background: rgb(0 0 0 / 70%);
+  z-index: 2;
+}
+.flap-fold { transform-origin: 50% 50%; visibility: hidden; z-index: 1; }
+.flap-unfold { transform-origin: 50% 50%; visibility: hidden; z-index: 1; }
+.flipping .flap-fold { visibility: visible; animation: flap-fold calc(var(--flap-step) / 2) ease-in forwards; }
+.flipping .flap-unfold { visibility: visible; animation: flap-unfold calc(var(--flap-step) / 2) ease-out calc(var(--flap-step) / 2) both; }
+@keyframes flap-fold { to { transform: rotateX(-90deg); } }
+@keyframes flap-unfold { from { transform: rotateX(90deg); } }
+
 .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-bottom: 1.75rem; }
 
 .agents {
