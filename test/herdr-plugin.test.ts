@@ -348,6 +348,18 @@ describe.skipIf(!posix)("plugin scripts", () => {
       expect(calls()).toEqual([["anynotate", "inbox", "--select", id], ["anynotate", "inbox"], ["anynotate", "inbox"], ["anynotate", "inbox"]]);
     });
 
+    test("inbox-pane keeps a failure on screen instead of letting the popup vanish", () => {
+      fakeAnynotate(fakebin, "echo 'env: bun: No such file or directory' >&2\nexit 127\n");
+      const failed = run("bin/anynotate-plugin", ["inbox-pane"]);
+      expect(failed.status).toBe(127);
+      expect(failed.stderr).toContain("env: bun: No such file or directory");
+      expect(failed.stdout).toContain("The Anynotate inbox exited with status 127. Run `anynotate doctor`");
+      fakeAnynotate(fakebin, "exit 130\n");
+      expect(run("bin/anynotate-plugin", ["inbox-pane"]).stdout).toBe("");
+      fakeAnynotate(fakebin, "exit 0\n");
+      expect(run("bin/anynotate-plugin", ["inbox-pane"]).stdout).toBe("");
+    });
+
     test("an unknown subcommand prints usage", () => {
       const result = run("bin/anynotate-plugin", ["bogus"]);
       expect(result.status).toBe(2);

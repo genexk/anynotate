@@ -130,7 +130,7 @@ If `~/.local/bin` is not on your `PATH`, the installer says so; add it in your s
 <summary>🩺 <b>Check, update, remove</b></summary>
 
 ```bash
-anynotate doctor               # install, PATH, service, bridge /health, token, extension, Chrome helper, hooks, retention
+anynotate doctor               # install, PATH, launcher (source installs), service, bridge /health, token, extension, Chrome helper, hooks, retention
 anynotate update --dry-run     # show what an update would do
 anynotate update               # install the latest release and restart the bridge
 anynotate uninstall --dry-run
@@ -310,7 +310,7 @@ bin/anynotate install --dry-run   # show what would be written
 bin/anynotate install
 ```
 
-A source install sets up the same service, hooks and Chrome helper, but links `~/.local/bin/anynotate` to the clone (on Windows an `anynotate.cmd` shim in `%LOCALAPPDATA%\anynotate\bin`, which `install` adds to the user `PATH` and `uninstall` removes; open a new terminal afterwards) and starts the helper through a `~/.anynotate/native-host` wrapper (`native-host.cmd` on Windows) that runs the CLI under Bun. Here `anynotate update` pulls the clone (`git pull --ff-only`), runs `bun install` and re-runs `install`; it needs a clean clone on `main` and otherwise refuses and changes nothing. Release binaries are built with `bun run build:binaries` (into `dist/bin`, with `SHA256SUMS`).
+A source install sets up the same service, hooks and Chrome helper, but puts a launcher at `~/.local/bin/anynotate` that runs the clone under Bun by absolute path, so it works where Bun is not on `PATH` (on Windows an `anynotate.cmd` shim in `%LOCALAPPDATA%\anynotate\bin`, which `install` adds to the user `PATH` and `uninstall` removes; open a new terminal afterwards) and starts the helper through a `~/.anynotate/native-host` wrapper (`native-host.cmd` on Windows) that runs the CLI under Bun. Here `anynotate update` pulls the clone (`git pull --ff-only`), runs `bun install` and re-runs `install`; it needs a clean clone on `main` and otherwise refuses and changes nothing. Release binaries are built with `bun run build:binaries` (into `dist/bin`, with `SHA256SUMS`).
 
 </details>
 

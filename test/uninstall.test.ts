@@ -224,7 +224,17 @@ posixOnly("uninstall is idempotent: a second run, or one with nothing installed,
   expect(existsSync(join(home, ".claude"))).toBe(true);
 });
 
-posixOnly("a bin symlink that points outside the clone, or a regular file, is left alone", () => {
+posixOnly("an earlier version's bin symlink into the clone is removed, and the clone's script kept", () => {
+  mkdirSync(join(home, ".local/bin"), { recursive: true });
+  symlinkSync(join(REPO, "bin/anynotate"), join(home, ".local/bin/anynotate"));
+  const log = applyUninstall(plan(), fakeExec, false);
+  expect(log).toContain(`removed ${join(home, ".local/bin/anynotate")}`);
+  expect(lstatSync(join(home, ".local/bin"), { throwIfNoEntry: false })?.isDirectory()).toBe(true);
+  expect(existsSync(join(home, ".local/bin/anynotate"))).toBe(false);
+  expect(existsSync(join(REPO, "bin/anynotate"))).toBe(true);
+});
+
+posixOnly("a bin symlink that points outside the clone, or a regular file that is not a launcher, is left alone", () => {
   mkdirSync(join(home, ".local/bin"), { recursive: true });
   symlinkSync("/somewhere/else/anynotate", join(home, ".local/bin/anynotate"));
   const log = applyUninstall(plan(), fakeExec, false);

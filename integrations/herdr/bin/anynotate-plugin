@@ -115,11 +115,20 @@ case "${1:-}" in
     open_pane "$id"
     ;;
   inbox-pane)
+    # herdr closes the popup as soon as its command exits, so a failure would only flash
+    # by: hold the popup open on its message until a key is pressed. 130 is Ctrl-C.
     select=${ANYNOTATE_INBOX_SELECT:-}
+    status=0
     if [ -n "$select" ] && is_bundle_id "$select"; then
-      exec "$run" inbox --select "$select"
+      "$run" inbox --select "$select" || status=$?
+    else
+      "$run" inbox || status=$?
     fi
-    exec "$run" inbox
+    if [ "$status" -ne 0 ] && [ "$status" -ne 130 ]; then
+      printf '\nThe Anynotate inbox exited with status %s. Run `anynotate doctor` in a terminal for details.\nPress Enter to close.\n' "$status"
+      read -r _ || true
+    fi
+    exit "$status"
     ;;
   *)
     printf 'usage: anynotate-plugin <send-here|open-inbox|open-link|inbox-pane>\n' >&2

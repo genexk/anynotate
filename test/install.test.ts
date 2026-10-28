@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 const ALL = () => true;
 import { posix, win32 } from "node:path";
 import { addHook, applyInstall, extensionOrigins, isAnynotateHook, type InstallOptions, type InstallStep, planInstall } from "../src/agent/install";
-import { type InstallKind, quoteArgv } from "../src/agent/installkind";
+import { type InstallKind, quoteArgv, sourceLauncher } from "../src/agent/installkind";
 import type { Exec } from "../src/platform/exec";
 
 // Plans for macOS and Linux build paths with posix.join whatever the host, so the expectations do too.
@@ -24,7 +24,6 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 const BUN = "/opt/bun/bin/bun";
 const REPO = process.cwd().replaceAll("\\", "/");
-const LAUNCHER = join(REPO, "bin/anynotate");
 const src = (repo = REPO): InstallKind => ({ kind: "source", repo, bun: BUN });
 const CMD = (agent: string, repo = REPO) => `${BUN} ${repo}/src/cli.ts hook --agent ${agent}`;
 const fakeExec: Exec = (argv) => {
@@ -58,7 +57,7 @@ test("addHook appends once and preserves existing hooks", () => {
 });
 
 
-test("planInstall targets Claude and Codex when installed, the Gemini cleanup, launchd and the bin symlink", () => {
+test("planInstall targets Claude and Codex when installed, the Gemini cleanup, launchd and the bin launcher", () => {
   const steps = planFor({ kind: src("/repo") });
   const paths = steps.map((s) => s.path.replace(home, "~"));
   expect(paths).toEqual([
@@ -79,7 +78,7 @@ test("planInstall targets Claude and Codex when installed, the Gemini cleanup, l
   ]);
   const plist = steps.at(-3)!.content;
   expect(plist).toContain(`<string>${BUN}</string>\n    <string>/repo/src/cli.ts</string>\n    <string>bridge</string>`);
-  expect(steps[1]!.content).toBe("/repo/bin/anynotate");
+  expect(steps[1]).toMatchObject({ action: "launcher", content: sourceLauncher({ bun: BUN, repo: "/repo" }) });
 });
 
 posixOnly("dry-run writes nothing; apply merges and backs up", () => {
@@ -143,32 +142,95 @@ posixOnly("a non-array hooks entry is skipped and the file left unchanged", () =
 const binLink = () => join(home, ".local/bin/anynotate");
 const linkLine = (log: string[]) => log.find((l) => l.includes(binLink()));
 
-posixOnly("bin symlink already pointing at anynotateBin is ok", () => {
-  mkdirSync(join(home, ".local/bin"), { recursive: true });
-  symlinkSync(LAUNCHER, binLink());
+const LAUNCHER = sourceLauncher({ bun: BUN, repo: REPO });
+
+posixOnly("the bin launcher is written executable, then left alone while it is current", () => {
+  expect(linkLine(apply(plan(), true))).toBe(`would write ${binLink()}`);
+  expect(existsSync(binLink())).toBe(false);
+  expect(linkLine(apply(plan(), false))).toBe(`wrote   ${binLink()}`);
+  expect(readFileSync(binLink(), "utf8")).toBe(LAUNCHER);
+  expect(statSync(binLink()).mode & 0o777).toBe(0o755);
   for (const dry of [true, false]) expect(linkLine(apply(plan(), dry))).toBe(`ok      ${binLink()}`);
-  expect(readlinkSync(binLink())).toBe(LAUNCHER);
 });
 
-posixOnly("bin symlink pointing elsewhere is replaced", () => {
-  mkdirSync(join(home, ".local/bin"), { recursive: true });
-  symlinkSync("/old/anynotate", binLink());
-  expect(linkLine(apply(plan(), true))).toBe(`would link ${binLink()} → ${LAUNCHER}`);
-  expect(readlinkSync(binLink())).toBe("/old/anynotate");
-  expect(linkLine(apply(plan(), false))).toBe(`linked  ${binLink()} → ${LAUNCHER}`);
-  expect(readlinkSync(binLink())).toBe(LAUNCHER);
+posixOnly("an older launcher is rewritten, and one that lost its exec bit gets it back", () => {
+  put(".local/bin/anynotate", sourceLauncher({ bun: "/old/bun", repo: REPO }));
+  expect(linkLine(apply(plan(), false))).toBe(`wrote   ${binLink()}`);
+  expect(readFileSync(binLink(), "utf8")).toBe(LAUNCHER);
+  chmodSync(binLink(), 0o644);
+  expect(linkLine(apply(plan(), false))).toBe(`wrote   ${binLink()}`);
+  expect(statSync(binLink()).mode & 0o777).toBe(0o755);
 });
 
-posixOnly("a regular file or dir at the bin path is never removed", () => {
+posixOnly("an earlier version's symlink is replaced by the launcher without writing through it", () => {
+  const clone = mkdtempSync(join(tmpdir(), "anynotate-clone-"));
+  try {
+    writeFileSync(join(clone, "anynotate"), "#!/usr/bin/env bun\n");
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    symlinkSync(join(clone, "anynotate"), binLink());
+    const plan = () => planFor({ installed: ALL, kind: src(clone) });
+    const LAUNCHER = sourceLauncher({ bun: BUN, repo: clone });
+    expect(linkLine(apply(plan(), true))).toBe(`would write ${binLink()} (replacing the symlink)`);
+    expect(lstatSync(binLink()).isSymbolicLink()).toBe(true);
+    expect(linkLine(apply(plan(), false))).toBe(`wrote   ${binLink()} (replaced the symlink)`);
+    expect(lstatSync(binLink()).isSymbolicLink()).toBe(false);
+    expect(readFileSync(binLink(), "utf8")).toBe(LAUNCHER);
+    expect(readFileSync(join(clone, "anynotate"), "utf8")).toBe("#!/usr/bin/env bun\n");
+  } finally {
+    rmSync(clone, { recursive: true, force: true });
+  }
+});
+
+posixOnly("a symlink to something other than this clone is left alone; a dangling one is replaced", () => {
+  const other = mkdtempSync(join(tmpdir(), "anynotate-fork-"));
+  try {
+    writeFileSync(join(other, "anynotate"), "fork\n");
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    symlinkSync(join(other, "anynotate"), binLink());
+    for (const dry of [true, false]) {
+      expect(linkLine(apply(plan(), dry))).toBe(`skip    ${binLink()} (a symlink to something other than this clone — left alone)`);
+    }
+    expect(lstatSync(binLink()).isSymbolicLink()).toBe(true);
+    rmSync(binLink());
+    symlinkSync("/moved/clone/bin/anynotate", binLink());
+    expect(linkLine(apply(plan(), false))).toBe(`wrote   ${binLink()} (replaced the symlink)`);
+    expect(readFileSync(binLink(), "utf8")).toBe(LAUNCHER);
+    expect(existsSync(`${binLink()}.anynotate-tmp`)).toBe(false);
+  } finally {
+    rmSync(other, { recursive: true, force: true });
+  }
+});
+
+posixOnly("a file or dir at the bin path that is not a launcher is never touched", () => {
   put(".local/bin/anynotate", "mine");
   for (const dry of [true, false]) {
-    expect(linkLine(apply(plan(), dry))).toBe(`skip    ${binLink()} (exists and is not a symlink)`);
+    expect(linkLine(apply(plan(), dry))).toBe(`skip    ${binLink()} (exists and is not an anynotate launcher)`);
   }
   expect(readFileSync(binLink(), "utf8")).toBe("mine");
   rmSync(binLink());
   mkdirSync(binLink());
-  expect(linkLine(apply(plan(), false))).toBe(`skip    ${binLink()} (exists and is not a symlink)`);
+  expect(linkLine(apply(plan(), false))).toBe(`skip    ${binLink()} (exists and is not an anynotate launcher)`);
   expect(lstatSync(binLink()).isDirectory()).toBe(true);
+});
+
+// What broke herdr's inbox popup: herdr starts plugin commands with the login shell's PATH, which lacks ~/.bun/bin.
+posixOnly("the launcher runs the CLI with no bun on PATH", () => {
+  const file = join(home, "anynotate");
+  writeFileSync(file, sourceLauncher({ bun: process.execPath, repo: REPO }), { mode: 0o755 });
+  const r = Bun.spawnSync([file, "--version"], { env: { HOME: home, PATH: "/usr/bin:/bin" } });
+  expect(r.stderr.toString()).toBe("");
+  expect(r.exitCode).toBe(0);
+  expect(r.stdout.toString().trim()).toBe(JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")).version);
+});
+
+posixOnly("a launcher whose bun moved falls back to PATH, and says so when there is none", () => {
+  const file = join(home, "anynotate");
+  writeFileSync(file, sourceLauncher({ bun: "/gone/bun", repo: REPO }), { mode: 0o755 });
+  const bunDir = posix.dirname(process.execPath);
+  expect(Bun.spawnSync([file, "--version"], { env: { HOME: home, PATH: `${bunDir}:/usr/bin:/bin` } }).exitCode).toBe(0);
+  const r = Bun.spawnSync([file, "--version"], { env: { HOME: home, PATH: "/usr/bin:/bin" } });
+  expect(r.exitCode).toBe(127);
+  expect(r.stderr.toString()).toBe("anynotate: bun is not at /gone/bun or on PATH; reinstall bun, then run anynotate install\n");
 });
 
 posixOnly("a differing file is backed up before it is overwritten", () => {
@@ -453,10 +515,10 @@ test("hooks name the absolute executable on every OS, quoted only when the path 
   expect(win("C:\\Users\\me").find((s) => s.action === "merge-json")!.path).toBe("C:\\Users\\me\\.claude\\settings.json");
 });
 
-test("a binary install links nothing, writes no wrapper, and registers the binary itself as the host", () => {
+test("a binary install writes no launcher, writes no wrapper, and registers the binary itself as the host", () => {
   const exe = "/home/me/.local/bin/anynotate";
   const steps = planFor({ platform: "linux", home: "/home/me", kind: { kind: "binary", exe } });
-  expect(steps.some((s) => s.action === "symlink")).toBe(false);
+  expect(steps.some((s) => s.action === "launcher")).toBe(false);
   expect(steps.some((s) => s.path.endsWith("native-host"))).toBe(false);
   const host = steps.find((s) => s.action === "native-host")!;
   expect(host.path).toBe("/home/me/.config/google-chrome/NativeMessagingHosts/dev.anynotate.host.json");

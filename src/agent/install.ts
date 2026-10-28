@@ -1,5 +1,5 @@
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, posix, win32 } from "node:path";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, posix, resolve, sep, win32 } from "node:path";
 import { addOrigin, ORIGIN_RE, readOrigins } from "../bridge/origins";
 import type { Exec } from "../platform/exec";
 import { makePrivateDir, writePrivateFile } from "../platform/files";
@@ -8,14 +8,14 @@ import { currentPlatform, type Env, installPaths, pathFor, type Platform } from 
 import { LAUNCHD_LABEL, planService, runSteps, type ServiceFile } from "../platform/service";
 import { ADD_PATH_ENTRY, runPathEntry } from "../platform/userpath";
 import { EMBEDDED_ASSETS } from "./assets";
-import { commandArgv, formatInstallRecord, INSTALL_RECORD, type InstallKind, type InstallRecord, quoteArgv } from "./installkind";
+import { commandArgv, formatInstallRecord, INSTALL_RECORD, type InstallKind, type InstallRecord, LAUNCHER_MARKER, quoteArgv, sourceLauncher } from "./installkind";
 
 export type InstallStep = {
   path: string;
   action:
     | "write"
     | "merge-json"
-    | "symlink"
+    | "launcher"
     | "private-dir"
     | "skip"
     | "remove-hook"
@@ -30,6 +30,8 @@ export type InstallStep = {
   encoding?: ServiceFile["encoding"];
   host?: HostStep;
   argv?: string[][];
+  // launcher: the clone it runs; a symlink is only replaced when it points into this clone, or at nothing.
+  into?: string;
 };
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -216,8 +218,8 @@ export function planInstall(o: InstallOptions): InstallStep[] {
   ];
 }
 
-// A binary install was put in place by the install script; a source install links the clone's launcher onto PATH,
-// on Windows through a .cmd shim whose dir install adds to the user PATH the way install.ps1 does.
+// A binary install was put in place by the install script; a source install puts a launcher for the clone on PATH,
+// on Windows a .cmd shim whose dir install adds to the user PATH the way install.ps1 does.
 function binSteps(platform: Platform, kind: InstallKind, binDir: string, binPath: string): InstallStep[] {
   if (kind.kind === "binary") return [];
   if (platform === "win32") {
@@ -226,7 +228,7 @@ function binSteps(platform: Platform, kind: InstallKind, binDir: string, binPath
       { path: binDir, action: "path-entry", content: "" },
     ];
   }
-  return [{ path: binPath, action: "symlink", content: posix.join(kind.repo, "bin", "anynotate") }];
+  return [{ path: binPath, action: "launcher", content: sourceLauncher(kind), into: kind.repo }];
 }
 
 function originSteps(originsPath: string, assets: string | undefined): InstallStep[] {
@@ -264,6 +266,13 @@ function nativeHostSteps(
     }),
   ];
 }
+
+const replaceableLink = (path: string, into: string | undefined) => {
+  const target = resolve(dirname(path), readlinkSync(path));
+  return !existsSync(target) || (into !== undefined && (target === into || target.startsWith(`${into}${sep}`)));
+};
+
+const isLauncher = (path: string) => readFileSync(path, "utf8").split("\n", 2)[1]?.startsWith(LAUNCHER_MARKER) ?? false;
 
 const lstatOrNull = (path: string) => {
   try {
@@ -393,15 +402,24 @@ export function applyInstall(steps: InstallStep[], dryRun: boolean, o: ApplyOpti
       if (dryRun) { log.push(existing ? `would chmod 700 ${s.path}` : `would mkdir ${s.path}`); continue; }
       makePrivateDir(s.path, platform, exec);
       log.push(existing ? `chmod   700 ${s.path}` : `mkdir   ${s.path}`);
-    } else {
+    } else if (s.action === "launcher") {
+      // Earlier versions linked the clone's `#!/usr/bin/env bun` script here; a link is replaced, never written through.
       const existing = lstatOrNull(s.path);
-      if (existing && !existing.isSymbolicLink()) { log.push(`skip    ${s.path} (exists and is not a symlink)`); continue; }
-      if (existing && readlinkSync(s.path) === s.content) { log.push(`ok      ${s.path}`); continue; }
-      if (dryRun) { log.push(`would link ${s.path} → ${s.content}`); continue; }
+      const link = existing?.isSymbolicLink() ?? false;
+      if (link && !replaceableLink(s.path, s.into)) { log.push(`skip    ${s.path} (a symlink to something other than this clone — left alone)`); continue; }
+      if (existing && !link) {
+        if (!existing.isFile() || !isLauncher(s.path)) { log.push(`skip    ${s.path} (exists and is not an anynotate launcher)`); continue; }
+        if (readFileSync(s.path, "utf8") === s.content && (existing.mode & 0o777) === 0o755) { log.push(`ok      ${s.path}`); continue; }
+      }
+      if (dryRun) { log.push(`would write ${s.path}${link ? " (replacing the symlink)" : ""}`); continue; }
       mkdirSync(dirname(s.path), { recursive: true });
-      rmSync(s.path, { force: true });
-      symlinkSync(s.content, s.path);
-      log.push(`linked  ${s.path} → ${s.content}`);
+      // Written beside the target and renamed over it, so an interrupted install never leaves half a launcher.
+      const tmp = `${s.path}.anynotate-tmp`;
+      rmSync(tmp, { force: true });
+      writeFileSync(tmp, s.content, { mode: 0o755 });
+      chmodSync(tmp, 0o755);
+      renameSync(tmp, s.path);
+      log.push(`wrote   ${s.path}${link ? " (replaced the symlink)" : ""}`);
     }
   }
   return log;

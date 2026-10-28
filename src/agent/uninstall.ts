@@ -8,7 +8,7 @@ import { planService, runSteps, tolerateNotRunning } from "../platform/service";
 import { REMOVE_PATH_ENTRY, runPathEntry } from "../platform/userpath";
 import { EMBEDDED_ASSETS } from "./assets";
 import { HOOKED_CLIS, isAnynotateHook, removeHook } from "./install";
-import { commandArgv, INSTALL_RECORD, type InstallKind, type InstallRecord } from "./installkind";
+import { commandArgv, INSTALL_RECORD, type InstallKind, type InstallRecord, LAUNCHER_MARKER } from "./installkind";
 
 export type UninstallStep =
   | { action: "run"; path: string; argv: string[][] }
@@ -17,7 +17,7 @@ export type UninstallStep =
   // The skill file is removed only while it still holds what install wrote, and its dir only once empty.
   | { action: "remove-skill"; path: string; content: string }
   | { action: "native-host"; path: string; host: HostStep }
-  | { action: "remove-symlink"; path: string; into: string }
+  | { action: "remove-launcher"; path: string; into: string }
   | { action: "remove-shim"; path: string; content: string }
   | { action: "remove-binary"; path: string }
   | { action: "rename-binary"; path: string; to: string }
@@ -92,7 +92,7 @@ const sameWinDir = (a: string, b: string) => a.replace(/\\+$/, "").toLowerCase()
 
 // A running Windows program can't be deleted, so the binary is renamed aside (its dir stays) and the next install
 // or a manual delete clears it. A source install never touches the clone, only what links it onto PATH: the
-// symlink, or on Windows the .cmd shim and the bin dir install added to the user PATH.
+// launcher (or the symlink earlier versions made), or on Windows the .cmd shim and the bin dir install added to the user PATH.
 function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath: string): UninstallStep[] {
   const path = pathFor(platform);
   if (k.kind === "binary") {
@@ -108,7 +108,7 @@ function binarySteps(platform: Platform, k: InstallKind, binDir: string, binPath
       { action: "remove-path-entry", path: binDir },
     ];
   }
-  return [{ action: "remove-symlink", path: binPath, into: k.repo }];
+  return [{ action: "remove-launcher", path: binPath, into: k.repo }];
 }
 
 const lstatOrNull = (path: string) => {
@@ -241,12 +241,15 @@ export function applyUninstall(steps: UninstallStep[], exec: Exec, dryRun: boole
         case "native-host":
           log.push(...applyHostSteps([s.host], exec, dryRun || (externalDryRun && isRegistryStep(s.host))));
           break;
-        case "remove-symlink": {
+        case "remove-launcher": {
           const stat = lstatOrNull(s.path);
           if (!stat) break;
           const target = stat.isSymbolicLink() ? resolve(dirname(s.path), readlinkSync(s.path)) : null;
-          if (!target || !(target === s.into || target.startsWith(`${s.into}${sep}`))) {
-            log.push(`skip    ${s.path} (not a link into ${s.into} — left alone)`);
+          const ours = target
+            ? target === s.into || target.startsWith(`${s.into}${sep}`)
+            : stat.isFile() && readFileSync(s.path, "utf8").split("\n", 2)[1]?.startsWith(LAUNCHER_MARKER);
+          if (!ours) {
+            log.push(`skip    ${s.path} (not an anynotate launcher or a link into ${s.into} — left alone)`);
             break;
           }
           if (dryRun) { log.push(`would remove ${s.path}`); break; }

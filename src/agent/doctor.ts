@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, readFileSync } from "node:fs";
 import { PROTOCOL_VERSION } from "@anynotate/protocol";
 import { bridgePort, type Health } from "../bridge/control";
 import { describeRetention, resolveRetention, type Retention } from "../inbox/retention";
@@ -8,7 +8,7 @@ import { HOST_NAME } from "../platform/nativehost";
 import { BROWSERS, browserConfigRoot, browserRegistryKey, type Browser, type Env, installPaths, pathFor, type Platform } from "../platform/os";
 import { LAUNCHD_LABEL, planService, SYSTEMD_UNIT, WINDOWS_TASK } from "../platform/service";
 import { HOOKED_CLIS, isAnynotateHook } from "./install";
-import { INSTALL_RECORD, type InstallRecord } from "./installkind";
+import { INSTALL_RECORD, type InstallRecord, LAUNCHER_MARKER } from "./installkind";
 import { mcpChecks } from "../mcp/install";
 import { EXPECTED_EXTENSION, EXTENSION_UPDATE_HINT, EXTENSIONS_FILE, extensionIsOlder, extensionLabel, parseExtensions, UNKNOWN_EXTENSION } from "../bridge/extension-version";
 
@@ -29,6 +29,7 @@ export type DoctorOptions = {
   exists?: (path: string) => boolean;
   readFile?: (path: string) => string;
   isExecutable?: (path: string) => boolean;
+  isSymlink?: (path: string) => boolean;
   isPrivate?: (path: string) => boolean | "unknown";
   which?: (cmd: string) => string | null;
   retention?: () => Retention;
@@ -61,6 +62,14 @@ function ago(ms: number): string {
   return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
 }
 
+const symlink = (path: string) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
 const executable = (path: string) => {
   try {
     accessSync(path, constants.X_OK);
@@ -76,6 +85,7 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
   const readFile = o.readFile ?? ((p: string) => readFileSync(p, "utf8"));
   const isExecutable = o.isExecutable ?? (platform === "win32" ? exists : executable);
   const which = o.which ?? ((cmd: string) => Bun.which(cmd));
+  const isSymlink = o.isSymlink ?? symlink;
   const path = pathFor(platform);
   const paths = installPaths(platform, home, env);
   const { dataDir } = paths;
@@ -117,6 +127,23 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
     const same = (a: string, b: string) => (platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
     if (record?.kind === "binary" && !same(found, record.path)) return { name, ok: "warn", detail: `${found} runs, but the install is ${record.path}` };
     return { name, ok: true, detail: found };
+  };
+
+  // A source install's launcher must run without the login shell's PATH: herdr and cron start it with a bare one.
+  const launcher = (): Check[] => {
+    if (record?.kind !== "source" || platform === "win32") return [];
+    const name = "launcher";
+    const file = paths.binPath;
+    if (isSymlink(file)) {
+      return [{ name, ok: "warn", detail: `${file} is a symlink to the clone's \`env bun\` script, which fails where bun is not on PATH (herdr, cron) — run \`anynotate install\`` }];
+    }
+    const text = read(file);
+    if (text === null) return [{ name, ok: "warn", detail: `no ${file} — run \`anynotate install\`` }];
+    const lines = text.split("\n");
+    if (!lines[1]?.startsWith(LAUNCHER_MARKER)) return [{ name, ok: "warn", detail: `${file} is not an anynotate launcher — remove it and run \`anynotate install\`` }];
+    const bun = /^bun=(.*)$/m.exec(text)?.[1]?.replace(/^'(.*)'$/, "$1").replace(/'\\''/g, "'");
+    if (!bun || !isExecutable(bun)) return [{ name, ok: "warn", detail: `${file} names bun at ${bun ?? "?"}, which is missing — run \`anynotate install\`` }];
+    return [{ name, ok: true, detail: `${file} runs ${bun}` }];
   };
 
   const service = (): Check => {
@@ -256,6 +283,7 @@ export async function runDoctor(o: DoctorOptions): Promise<Check[]> {
   return [
     install(),
     onPath(),
+    ...launcher(),
     service(),
     await bridge(),
     token(),

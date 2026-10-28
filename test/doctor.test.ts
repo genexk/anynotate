@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { type Check, type DoctorOptions, formatChecks, runDoctor } from "../src/agent/doctor";
+import { sourceLauncher } from "../src/agent/installkind";
 import type { Exec } from "../src/platform/exec";
 import { cliArgv } from "./fixtures/spawn";
 import { browserConfigRoot, browserRegistryKey } from "../src/platform/os";
@@ -244,6 +245,35 @@ const cli = async (args: string[]) => {
   return { code: await proc.exited, out };
 };
 
+const BUN = "/home/me/.bun/bin/bun";
+const sourceFake = (launcher: string, isLink = false) => {
+  const f = linuxFake();
+  f.files["/home/me/.anynotate/install.json"] = record("/home/me/src/anynotate").replace('"binary"', '"source"');
+  f.files["/home/me/src/anynotate"] = "";
+  f.files[EXE] = launcher;
+  f.files[BUN] = "";
+  return { f, o: { ...options(f), isSymlink: (p: string) => isLink && p === EXE } };
+};
+
+test("a source install's launcher is checked: current, a symlink from an earlier version, or naming a bun that is gone", async () => {
+  const launcher = sourceLauncher({ bun: BUN, repo: "/home/me/src/anynotate" });
+  let { o } = sourceFake(launcher);
+  expect(byName(await runDoctor(o), "launcher")).toEqual({ name: "launcher", ok: true, detail: `${EXE} runs ${BUN}` });
+
+  ({ o } = sourceFake("#!/usr/bin/env bun\n", true));
+  expect(byName(await runDoctor(o), "launcher")).toMatchObject({ ok: "warn", detail: expect.stringContaining("is a symlink to the clone's `env bun` script") });
+
+  const moved = sourceFake(sourceLauncher({ bun: "/gone/bun", repo: "/home/me/src/anynotate" }));
+  expect(byName(await runDoctor(moved.o), "launcher")).toMatchObject({ ok: "warn", detail: `${EXE} names bun at /gone/bun, which is missing — run \`anynotate install\`` });
+
+  ({ o } = sourceFake("#!/bin/sh\nexec something\n"));
+  expect(byName(await runDoctor(o), "launcher")).toMatchObject({ ok: "warn", detail: expect.stringContaining("is not an anynotate launcher") });
+});
+
+test("a binary install has no launcher check", async () => {
+  expect(byName(await runDoctor(options(linuxFake())), "launcher")).toBeUndefined();
+});
+
 test("CLI doctor prints one line per check and a summary, skips the service under a dry run and fails with no bridge", async () => {
   expect((await cli(["install"])).code).toBe(0);
   const { code, out } = await cli(["doctor"]);
@@ -252,6 +282,7 @@ test("CLI doctor prints one line per check and a summary, skips the service unde
   for (const line of lines.slice(0, -1)) expect(line).toMatch(/^[✓✗!] \S.*?  \S/);
   expect(lines).toContain("! service  skipped (dry run)");
   expect(lines.some((l) => l.startsWith("✓ install  source "))).toBe(true);
+  if (process.platform !== "win32") expect(lines.some((l) => /^✓ launcher  \S+\/\.local\/bin\/anynotate runs \//.test(l))).toBe(true);
   expect(lines.some((l) => l.startsWith("✗ bridge  not answering on http://127.0.0.1:1/health"))).toBe(true);
   expect(lines.at(-1)).toMatch(/^\d+ failed(, \d+ warning\(s\))?, \d+ skipped — see above\.$/);
 });

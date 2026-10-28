@@ -2,6 +2,17 @@
 
 All notable changes to Anynotate are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.6] - 2026-10-28
+
+### Fixed
+
+- A source install now puts a small launcher at `~/.local/bin/anynotate` that runs Bun by its absolute path, instead of a symlink to the clone's `#!/usr/bin/env bun` script. Programs that start `anynotate` without your shell's `PATH`, such as the herdr server when Bun's directory is only added in `.zshrc`, failed with `env: bun: No such file or directory`, which made the herdr inbox popup flash and close. `anynotate install` and `anynotate update` replace the old symlink; `anynotate uninstall` removes either.
+- The herdr inbox popup stays open with the exit status when the inbox fails to start, instead of closing before the error can be read.
+
+### Added
+
+- `anynotate doctor` has a `launcher` check for source installs: it warns about a symlink left by an earlier version and about a launcher whose Bun has moved.
+
 ## [0.6.5] - 2026-10-05
 
 ### Changed

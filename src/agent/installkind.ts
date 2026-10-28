@@ -35,6 +35,20 @@ export const quoteArgv = (argv: string[], platform: Platform) =>
     )
     .join(" ");
 
+// A source install's command on PATH. herdr, launchd, cron and Chrome start commands without the login shell's
+// PATH, where bun often isn't (its installer adds ~/.bun/bin in .zshrc), so bun is named by absolute path, with
+// PATH only as a fallback for a bun that has since moved. The marker line lets install and uninstall recognise it.
+export const LAUNCHER_MARKER = "# anynotate source launcher";
+export const sourceLauncher = (k: { bun: string; repo: string }) =>
+  [
+    "#!/bin/sh",
+    `${LAUNCHER_MARKER}, written by \`anynotate install\``,
+    `bun=${quoteArgv([k.bun], "linux")}`,
+    `[ -x "$bun" ] || bun=$(command -v bun) || { printf 'anynotate: bun is not at %s or on PATH; reinstall bun, then run anynotate install\\n' ${quoteArgv([k.bun], "linux")} >&2; exit 127; }`,
+    `exec "$bun" ${quoteArgv([posix.join(k.repo, "src", "cli.ts")], "linux")} "$@"`,
+    "",
+  ].join("\n");
+
 // path is the binary for a binary install and the clone for a source install.
 export type InstallRecord = { kind: "binary" | "source"; path: string; version: string; installedAt: string; platform: Platform };
 
