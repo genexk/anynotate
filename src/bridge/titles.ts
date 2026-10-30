@@ -28,8 +28,8 @@ const KNOWN_SECRETS = [
 
 const isTokenLike = (run: string) =>
   /\d/.test(run) && /[a-z]/.test(run) && /[A-Z]/.test(run) && (run.match(/[/.-]/g)?.length ?? 0) / run.length < MAX_SEPARATOR_SHARE;
-const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
-const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+export const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
+export const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const LEADING_TAG_BLOCK = /^\s*<([A-Za-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>/;
 
 export type TitleRoots = { claudeProjects: string; codexHome: string };
@@ -49,7 +49,7 @@ export function cleanTitle(text: string): string {
   return chars.length > TITLE_MAX ? `${chars.slice(0, TITLE_MAX - 1).join("").trimEnd()}…` : t;
 }
 
-const isPlainFile = (path: string) => {
+export const isPlainFile = (path: string) => {
   try {
     return lstatSync(path).isFile();
   } catch {
@@ -194,7 +194,7 @@ function findCodexRollout(sessionsDir: string, sessionId: string): string | unde
   return undefined;
 }
 
-function findClaudeTranscript(projects: string, sessionId: string, cwd: string): string | undefined {
+export function findClaudeTranscript(projects: string, sessionId: string, cwd: string): string | undefined {
   const file = `${sessionId}.jsonl`;
   const direct = join(projects, cwd.replace(/[^a-zA-Z0-9]/g, "-"), file);
   if (isPlainFile(direct)) return direct;

@@ -101,6 +101,8 @@ export const Session = z.object({
   sessionIds: z.array(z.string()).optional(),
   /** Display name of the herdr workspace a herdr pane is in. */
   workspace: z.string().optional(),
+  /** claude.ai artifacts this session published, each with the time of its first publish; newest first, at most 50. */
+  published: z.array(z.object({ id: z.string(), at: z.string() })).optional(),
 });
 export type Session = z.infer<typeof Session>;
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Bundle, BundleInput, Session, Status, Target } from "@anynotate/protocol";
+import { Bundle, BundleInput, Session, SessionsResponse, Status, Target } from "@anynotate/protocol";
 import { sampleInput } from "./fixtures/sample";
 
 test("BundleInput accepts a valid text annotation", () => {
@@ -128,4 +128,12 @@ test("a session may name its herdr workspace", () => {
   expect(Session.parse({ ...base, workspace: "shop" }).workspace).toBe("shop");
   expect(Session.parse(base).workspace).toBeUndefined();
   expect(Session.safeParse({ ...base, workspace: 3 }).success).toBe(false);
+});
+
+test("a session may list the claude.ai artifacts it published", () => {
+  const base = { id: "w1:p2", agent: "claude", cwd: "/home/me/project", title: "shell", method: "herdr", pane: "w1:p2" };
+  const published = [{ id: "Xq7artifactFixture01", at: "2026-10-29T22:59:47.301Z" }];
+  expect(SessionsResponse.parse([{ ...base, published }])[0]!.published).toEqual(published);
+  expect(SessionsResponse.parse([base])[0]!.published).toBeUndefined();
+  expect(SessionsResponse.safeParse([{ ...base, published: [{ id: 1 }] }]).success).toBe(false);
 });

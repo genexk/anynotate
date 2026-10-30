@@ -192,6 +192,61 @@ test("a herdr pane carries its workspace name; sessions without one omit the fie
   for (const x of s) expect(Session.safeParse(x).success).toBe(true);
 });
 
+test("claude sessions carry the artifacts they published; codex, unnamed panes and empty results get no field", async () => {
+  bridge.server.stop(true);
+  const asked: { sessionId: string; cwd: string }[] = [];
+  const found: Record<string, { id: string; at: string }[]> = {
+    S1: [{ id: "0000aaaa-1111-4222-8333-444455556666", at: "2026-01-02T03:04:05.000Z" }],
+    "s-1": [{ id: "abc123", at: "2026-01-01T00:00:00.000Z" }],
+    "n-1": [{ id: "def456", at: "2026-01-03T00:00:00.000Z" }],
+    C1: [{ id: "never-asked", at: "2026-01-01T00:00:00.000Z" }],
+  };
+  bridge = createBridge({
+    token: "tok", port: 0,
+    listPanes: async () => [
+      { pane: "w2:p1", agent: "claude", cwd: "/r1", title: "", status: "idle" },
+      { pane: "w3:p1", agent: "claude", cwd: "/r5", title: "", status: "idle" },
+      { pane: "w1:p2", agent: "codex", cwd: "/r2", title: "shell", status: "idle" },
+    ],
+    published: (q) => {
+      asked.push(q);
+      return found[q.sessionId] ?? [];
+    },
+  });
+  base = `http://127.0.0.1:${bridge.server.port}`;
+  await fetch(`${base}/register`, { method: "POST", headers: H, body: JSON.stringify({ id: "s-1", agent: "claude", cwd: "/r0", title: "t" }) });
+  touchSeen("claude", "S1", "/r1", new Date(), "w2:p1");
+  touchSeen("codex", "C1", "/r2", new Date(), "w1:p2");
+  touchSeen("claude", "n-1", "/r3");
+  touchSeen("claude", "n-2", "/r4");
+  const s = await (await fetch(`${base}/sessions`, { headers: H })).json();
+  const by = (id: string) => s.find((x: any) => x.id === id);
+  expect(by("w2:p1").published).toEqual(found.S1);
+  expect(by("s-1").published).toEqual(found["s-1"]);
+  expect(by("n-1").published).toEqual(found["n-1"]);
+  expect(by("w3:p1")).not.toHaveProperty("published");
+  expect(by("w1:p2")).not.toHaveProperty("published");
+  expect(by("n-2")).not.toHaveProperty("published");
+  expect(asked).toContainEqual({ sessionId: "S1", cwd: "/r1" });
+  expect(asked).toContainEqual({ sessionId: "s-1", cwd: "/r0" });
+  expect(asked.some((q) => q.sessionId === "C1")).toBe(false);
+  for (const x of s) expect(Session.safeParse(x).success).toBe(true);
+});
+
+test("a pane's published artifacts are looked up in the folder its session was seen in, not the pane's current one", async () => {
+  bridge.server.stop(true);
+  const asked: { sessionId: string; cwd: string }[] = [];
+  bridge = createBridge({
+    token: "tok", port: 0,
+    listPanes: async () => [{ pane: "w4:p1", agent: "claude", cwd: "/home/me/elsewhere", title: "", status: "idle" }],
+    published: (q) => { asked.push(q); return []; },
+  });
+  base = `http://127.0.0.1:${bridge.server.port}`;
+  touchSeen("claude", "S4", "/home/me/started-here", new Date(), "w4:p1");
+  await fetch(`${base}/sessions`, { headers: H });
+  expect(asked).toEqual([{ sessionId: "S4", cwd: "/home/me/started-here" }]);
+});
+
 test("SSE delivers pushes to a registered adapter, ack updates status", async () => {
   await fetch(`${base}/register`, { method: "POST", headers: H, body: JSON.stringify({ id: "s-1", agent: "claude", cwd: "/tmp/repo", title: "" }) });
   const events = await fetch(`${base}/adapter/s-1/events`, { headers: H });

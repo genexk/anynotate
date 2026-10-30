@@ -2,6 +2,12 @@
 
 All notable changes to Anynotate are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.7] - 2026-10-29
+
+### Added
+
+- `/sessions` lists, for each running Claude Code session, the claude.ai artifacts it published, read from its transcript, so the extension can default to the session that made the page.
+
 ## [0.6.6] - 2026-10-28
 
 ### Fixed

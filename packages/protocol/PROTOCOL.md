@@ -114,6 +114,7 @@ Each entry is a CSS selector for an `<iframe>`, outermost first, resolved in the
   - Optional `offscreen: true` on any annotation whose target was not on the page at send time (`box` and crop are from when the note was made); `README.md` puts "Not on the page when sent — crop is from when the note was made." under its heading (without the crop clause when no crop was sent; additive, same releases; wording since bridge 0.6.1).
   - Optional `anchor.frames` on notes made inside same-origin iframes; `README.md` names the frames after the selector (additive, same releases).
   - Optional `workspace` on `Session`: the display name of the herdr workspace holding a herdr pane (additive, `@anynotate/protocol` 0.5.0, bridge 0.6.1).
+  - Optional `published` on `Session`: claude.ai artifacts the session published, with the time of its first publish (additive, `@anynotate/protocol` 0.6.0, bridge 0.6.7).
 
 ## Threat model
 

@@ -3,6 +3,7 @@ import { Agent, BundleInput, type HealthResponse, PROTOCOL_MIN, PROTOCOL_VERSION
 import pkg from "../../package.json";
 import { listSeen } from "../inbox/seen";
 import { readBundle, readStatus, updateStatus, writeBundle } from "../inbox/store";
+import { createArtifactIndex } from "./artifacts";
 import { EXTENSION_HEADER, extensionRecorder, senderFromHeader } from "./extension-version";
 import { listPanes as herdrListPanes, type Pane, promptPane, waitIdle } from "./herdr";
 import { Registry } from "./registry";
@@ -22,6 +23,7 @@ type Opts = {
   listPanes?: () => Promise<Pane[]>;
   routeWaitMs?: number;
   sessionTitle?: (q: TitleQuery) => string;
+  published?: (q: { sessionId: string; cwd: string }) => { id: string; at: string }[];
   recordExtension?: (sender: string, origin: string) => void;
 };
 
@@ -45,6 +47,13 @@ export function createBridge(opts: Opts) {
   const listPanes = opts.listPanes ?? (() => herdrListPanes());
   const routeWaitMs = opts.routeWaitMs ?? ROUTE_WAIT_MS;
   const sessionTitle = opts.sessionTitle ?? createTitler();
+  const published = opts.published ?? createArtifactIndex();
+  // Only Claude Code transcripts record artifacts, so only claude sessions are scanned.
+  const publishedBy = (agent: string, sessionId: string | undefined, cwd: string): Pick<Session, "published"> => {
+    if (agent !== "claude" || !sessionId) return {};
+    const found = published({ sessionId, cwd });
+    return found.length ? { published: found } : {};
+  };
   const recordExtension = opts.recordExtension ?? extensionRecorder();
   const deps: RouteDeps = {
     registry,
@@ -87,7 +96,7 @@ export function createBridge(opts: Opts) {
       if (sender && origin) recordExtension(sender, origin);
       try {
         if ((req.method === "GET" || req.method === "POST") && url.pathname === "/sessions") {
-          const push = registry.live();
+          const push: Session[] = registry.live().map((s) => ({ ...s, ...publishedBy(s.agent, s.id, s.cwd) }));
           const pushIds = new Set(push.map((s) => s.id));
           const seen = listSeen();
           // A pane belongs to its newest seen session of the same agent (listSeen is newest first).
@@ -97,13 +106,14 @@ export function createBridge(opts: Opts) {
               id: p.pane, agent: p.agent, cwd: p.cwd, title: p.title, method: "herdr", pane: p.pane,
               ...(owner ? { sessionIds: [owner.sessionId] } : {}),
               ...(p.workspace ? { workspace: p.workspace } : {}),
+              ...publishedBy(p.agent, owner?.sessionId, owner?.cwd ?? p.cwd),
             };
           });
           // A session tied to a herdr pane is that pane's owner (already listed as the pane) or an exited/child run
           // that will never take another prompt, so only sessions outside herdr are offered for next-prompt delivery.
           const next: Session[] = seen
             .filter((s) => !s.pane && !pushIds.has(s.sessionId))
-            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: sessionTitle(s), method: "next-prompt" }));
+            .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.cwd, title: sessionTitle(s), method: "next-prompt", ...publishedBy(s.agent, s.sessionId, s.cwd) }));
           return json([...push, ...herdr, ...next]);
         }
 
